@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ matrix.rfq.title }} — {{ app_name }}{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+{% set rfq = matrix.rfq %}
+<div class="topbar" style="margin-bottom:0.5rem">
+  <div>
+    <h1 style="margin:0">{{ rfq.title }}</h1>
+    <p class="muted" style="margin:0.3rem 0 0">
+      <span class="badge {{ rfq.status }}">{{ rfq.status }}</span>
+      · создан {{ rfq.created_at[:16].replace('T',' ') }}
+      {% if rfq.sent_at %}· отправлен {{ rfq.sent_at[:16].replace('T',' ') }}{% endif %}
+    </p>
+  </div>
+  <div class="actions" style="margin:0">
+    {% if rfq.status in ['draft'] or rfq.messages|selectattr('status','equalto','pending')|list %}
+      <form method="post" action="/rfq/{{ rfq.id }}/send">
+        <button class="btn" type="submit">Отправить письма</button>
+      </form>
+    {% endif %}
+    <form method="post" action="/rfq/{{ rfq.id }}/poll">
+      <button class="btn secondary" type="submit">Проверить почту</button>
+    </form>
+    <a class="btn secondary" href="/rfq">К списку</a>
+  </div>
+</div>
+
+{% if rfq.notes %}<p class="lead">{{ rfq.notes }}</p>{% endif %}
+
+<div class="grid grid-2">
+  <div class="panel">
+    <h2>Позиции</h2>
+    <table>
+      <thead><tr><th>Товар</th><th>Кол-во</th><th>Комментарий</th></tr></thead>
+      <tbody>
+      {% for it in rfq.items %}
+        <tr>
+          <td>{{ it.category_name }} — {{ it.product_name }}</td>
+          <td>{{ it.quantity }} {{ it.unit }}</td>
+          <td class="muted">{{ it.note }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>Письма поставщикам</h2>
+    <table>
+      <thead><tr><th>Поставщик</th><th>Статус</th><th>Ответы</th><th>Токен</th></tr></thead>
+      <tbody>
+      {% for m in rfq.messages %}
+        <tr>
+          <td>{{ m.supplier_name }}<br /><span class="pill-muted">{{ m.supplier_email }}</span></td>
+          <td><span class="badge {{ m.status }}">{{ m.status }}</span>{% if m.error %}<br /><span class="pill-muted">{{ m.error }}</span>{% endif %}</td>
+          <td>{{ m.replies }}</td>
+          <td><code>[RFQ-{{ m.token }}]</code></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Сводка цен и сроков</h2>
+  {% if not matrix.chart %}
+    <p class="muted">Пока нет оцифрованных ответов. Нажмите «Проверить почту» после ответов поставщиков.</p>
+  {% else %}
+  <div class="chart-box"><canvas id="priceChart"></canvas></div>
+  {% endif %}
+
+  <table style="margin-top:1rem">
+    <thead>
+      <tr>
+        <th>Товар</th>
+        {% for s in matrix.suppliers %}
+          <th>{{ s.supplier_name }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in matrix.rows %}
+      <tr>
+        <td>{{ row.item.product_name }}<br /><span class="pill-muted">{{ row.item.quantity }} {{ row.item.unit }}</span></td>
+        {% for q in row.quotes %}
+          <td>
+            {% if q.quote and q.quote.unit_price is not none %}
+              <strong>{{ q.quote.unit_price | money }}</strong> {{ q.quote.currency }}
+              {% if q.quote.lead_time_days is not none %}<br /><span class="pill-muted">{{ q.quote.lead_time_days }} дн.</span>{% endif %}
+              {% if q.quote.in_stock == 1 %}<br /><span class="badge replied">в наличии</span>{% elif q.quote.in_stock == 0 %}<br /><span class="badge pending">под заказ</span>{% endif %}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+        {% endfor %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% for s in matrix.suppliers %}
+  {% if s.raw_replies %}
+  <div class="panel">
+    <h2>Ответ: {{ s.supplier_name }}</h2>
+    {% for r in s.raw_replies %}
+      <p class="muted">{{ r.received_at[:16].replace('T',' ') }} · {{ r.from_addr }} · разбор: {{ r.parse_status }}</p>
+      <div class="pre">{{ r.raw_body[:4000] }}</div>
+      <form method="post" action="/rfq/{{ rfq.id }}/reparse/{{ r.id }}" style="margin-top:0.5rem">
+        <button class="btn secondary small" type="submit">Переразобрать</button>
+      </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endfor %}
+
+{% for m in rfq.messages %}
+<details class="panel">
+  <summary>Черновик письма → {{ m.supplier_name }}</summary>
+  <p><strong>{{ m.subject }}</strong></p>
+  <div class="pre">{{ m.body }}</div>
+</details>
+{% endfor %}
+
+<script>
+const raw = {{ chart_json | safe }};
+if (raw.length && window.Chart) {
+  const products = [...new Set(raw.map(x => x.product))];
+  const suppliers = [...new Set(raw.map(x => x.supplier))];
+  const palette = ['#0f6b4c','#c45c26','#2c5f8a','#7a4e2d','#4a6b3a','#8a3d4a'];
+  const datasets = suppliers.map((s, i) => ({
+    label: s,
+    data: products.map(p => {
+      const hit = raw.find(x => x.product === p && x.supplier === s);
+      return hit ? hit.price : null;
+    }),
+    backgroundColor: palette[i % palette.length],
+  }));
+  new Chart(document.getElementById('priceChart'), {
+    type: 'bar',
+    data: { labels: products, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, title: { display: true, text: 'Цена' } } },
+      plugins: { legend: { position: 'bottom' } }
+    }
+  });
+}
+</script>
+{% endblock %}

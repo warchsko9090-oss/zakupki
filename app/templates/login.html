@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Вход — {{ app_name }}{% endblock %}
+{% block body %}
+<div class="login-wrap">
+  <div class="panel login-card">
+    <h1>{{ app_name }}</h1>
+    <p class="lead">Почтовый ассистент отдела закупок</p>
+    {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+    <form method="post" action="/login" class="stack">
+      <div class="field">
+        <label for="password">Пароль</label>
+        <input id="password" type="password" name="password" autofocus required />
+      </div>
+      <button class="btn" type="submit">Войти</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

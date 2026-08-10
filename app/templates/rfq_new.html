@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Новый запрос — {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Новый запрос КП</h1>
+<p class="lead">Выберите товары и поставщиков — письма сформируются по шаблону и уйдут с Яндекс.Почты.</p>
+
+<form method="post" action="/rfq/new" class="stack" id="rfq-form">
+  <div class="panel">
+    <div class="row">
+      <div class="field" style="flex:2">
+        <label>Название запроса</label>
+        <input type="text" name="title" value="Запрос КП" placeholder="Например: Крепёж на март" required />
+      </div>
+      <div class="field">
+        <label>Заметка (внутренняя)</label>
+        <input type="text" name="notes" />
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Товары</h2>
+    <p class="muted">Отметьте позиции и укажите количество.</p>
+    <table>
+      <thead><tr><th></th><th>Товар</th><th>Кол-во</th><th>Ед.</th><th>Комментарий в письме</th></tr></thead>
+      <tbody>
+      {% for p in products %}
+        <tr>
+          <td><input type="checkbox" name="product_id" value="{{ p.id }}" class="prod-check" data-unit="{{ p.unit }}" /></td>
+          <td>{{ p.category_name }} — <strong>{{ p.name }}</strong></td>
+          <td style="width:100px"><input type="number" name="quantity" value="1" min="0.01" step="0.01" /></td>
+          <td style="width:80px"><input type="text" name="unit" value="{{ p.unit }}" /></td>
+          <td><input type="text" name="item_note" placeholder="опционально" /></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">Сначала добавьте товары в каталоге.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Поставщики</h2>
+    <p class="muted">Показаны все; логично выбирать тех, у кого есть нужный ассортимент.</p>
+    <div class="check-list">
+      {% for s in suppliers %}
+        <label>
+          <input type="checkbox" name="supplier_id" value="{{ s.id }}" />
+          <span>
+            <strong>{{ s.name }}</strong> — {{ s.email }}
+            {% if s.products %}
+              <span class="pill-muted">({{ s.products | map(attribute='name') | join(', ') }})</span>
+            {% endif %}
+          </span>
+        </label>
+      {% else %}
+        <p class="muted">Нет поставщиков.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" type="submit" name="send_now" value="1">Сформировать и отправить</button>
+    <button class="btn secondary" type="submit" name="send_now" value="0">Сохранить черновик</button>
+    <a class="btn secondary" href="/rfq">Отмена</a>
+  </div>
+</form>
+
+<script>
+  // Keep quantity/unit/note aligned with checked products: server reads parallel lists.
+  // Unchecked rows still submit empty parallel fields — strip unchecked before submit.
+  document.getElementById('rfq-form').addEventListener('submit', function () {
+    document.querySelectorAll('tbody tr').forEach(function (tr) {
+      var cb = tr.querySelector('.prod-check');
+      if (!cb) return;
+      if (!cb.checked) {
+        tr.querySelectorAll('input[name=quantity], input[name=unit], input[name=item_note]').forEach(function (el) {
+          el.disabled = true;
+        });
+      }
+    });
+  });
+</script>
+{% endblock %}

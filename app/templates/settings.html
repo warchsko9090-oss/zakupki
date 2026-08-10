@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Настройки — {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Настройки</h1>
+<p class="lead">Почта и шаблон писем. Учётные данные задаются в переменных окружения / .env.</p>
+
+<div class="grid grid-2">
+  <div class="panel">
+    <h2>Почта Яндекс</h2>
+    <p>Отправитель: <strong>{{ sender_name }}</strong>{% if sender_company %} · {{ sender_company }}{% endif %}</p>
+    <p class="muted">Логин: {{ mail_user }}<br />From: {{ mail_from }}</p>
+    <p class="muted">
+      Статус: {% if mail_ready %}<span class="badge replied">готово</span>{% else %}<span class="badge error">не настроено</span>{% endif %}
+      · AI: {% if ai_ready %}вкл.{% else %}выкл. (эвристики){% endif %}
+    </p>
+    <form method="post" action="/settings/poll">
+      <button class="btn secondary" type="submit">Проверить входящие сейчас</button>
+    </form>
+    <p class="pill-muted" style="margin-top:0.75rem">
+      Нужен <strong>пароль приложения</strong> Яндекса (не обычный пароль от почты):
+      id.yandex.ru → Безопасность → Пароли приложений.
+      SMTP/IMAP: smtp.yandex.ru:465 / imap.yandex.ru:993.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h2>Шаблон письма</h2>
+    <p class="muted">Переменные Jinja2: <code>token</code>, <code>contact</code>, <code>sender_name</code>, <code>company</code>, <code>items</code> (name, quantity, unit, note), <code>reply_hint</code>.</p>
+    <form method="post" action="/settings/template" class="stack">
+      <div class="field">
+        <label>Тема</label>
+        <input type="text" name="subject_tpl" value="{{ tpl.subject_tpl }}" required />
+      </div>
+      <div class="field">
+        <label>Текст</label>
+        <textarea name="body_tpl" rows="16" required>{{ tpl.body_tpl }}</textarea>
+      </div>
+      <button class="btn" type="submit">Сохранить шаблон</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

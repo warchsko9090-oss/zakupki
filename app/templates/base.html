@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css" />
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% if request.session.get('auth') %}
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand">{{ app_name }}</div>
+      <nav class="nav">
+        <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Обзор</a>
+        <a href="/catalog" class="{% if request.url.path.startswith('/catalog') %}active{% endif %}">Каталог</a>
+        <a href="/suppliers" class="{% if request.url.path.startswith('/suppliers') %}active{% endif %}">Поставщики</a>
+        <a href="/rfq" class="{% if request.url.path.startswith('/rfq') %}active{% endif %}">Запросы</a>
+        <a href="/settings" class="{% if request.url.path.startswith('/settings') %}active{% endif %}">Настройки</a>
+        <form method="post" action="/logout" style="display:inline">
+          <button class="btn secondary small" type="submit">Выйти</button>
+        </form>
+      </nav>
+    </header>
+    {% if flash %}
+      <div class="flash {{ flash.kind }}">{{ flash.message }}</div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </div>
+  {% else %}
+    {% block body %}{% endblock %}
+  {% endif %}
+</body>
+</html>

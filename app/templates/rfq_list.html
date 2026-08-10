@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Запросы — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="topbar" style="margin-bottom:0.5rem">
+  <h1 style="margin:0">Запросы КП</h1>
+  <a class="btn" href="/rfq/new">Новый запрос</a>
+</div>
+<p class="lead">История рассылок и собранных ответов.</p>
+
+<div class="panel">
+  {% if not rfqs %}
+    <p class="muted">Запросов ещё нет.</p>
+  {% else %}
+  <table>
+    <thead>
+      <tr><th>Название</th><th>Статус</th><th>Письма</th><th>Ответы</th><th>Дата</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for r in rfqs %}
+      <tr>
+        <td>{{ r.title }}</td>
+        <td><span class="badge {{ r.status }}">{{ r.status }}</span></td>
+        <td>{{ r.msg_count }}</td>
+        <td>{{ r.reply_count }}</td>
+        <td class="pill-muted">{{ r.created_at[:16].replace('T',' ') }}</td>
+        <td><a href="/rfq/{{ r.id }}">Открыть</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

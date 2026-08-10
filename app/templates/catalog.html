@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Каталог — {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Каталог</h1>
+<p class="lead">Категории и наименования товаров. К товарам потом привязываются поставщики.</p>
+
+<div class="grid grid-2">
+  <div class="panel">
+    <h2>Новая категория</h2>
+    <form method="post" action="/catalog/categories" class="row">
+      <div class="field" style="flex:2">
+        <label>Название</label>
+        <input type="text" name="name" required placeholder="Например: Крепёж" />
+      </div>
+      <button class="btn" type="submit">Добавить</button>
+    </form>
+    {% if categories %}
+    <table>
+      <thead><tr><th>Категория</th><th></th></tr></thead>
+      <tbody>
+      {% for c in categories %}
+        <tr>
+          <td>{{ c.name }}</td>
+          <td>
+            <form method="post" action="/catalog/categories/{{ c.id }}/delete" onsubmit="return confirm('Удалить категорию и товары?')">
+              <button class="btn danger small" type="submit">Удалить</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>Новый товар</h2>
+    <form method="post" action="/catalog/products" class="stack">
+      <div class="field">
+        <label>Категория</label>
+        <select name="category_id" required>
+          {% for c in categories %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Наименование</label>
+        <input type="text" name="name" required />
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Ед. изм.</label>
+          <input type="text" name="unit" value="шт" />
+        </div>
+        <div class="field" style="flex:2">
+          <label>Заметка</label>
+          <input type="text" name="notes" />
+        </div>
+      </div>
+      <button class="btn" type="submit">Добавить товар</button>
+    </form>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Товары</h2>
+  {% if not products %}
+    <p class="muted">Пока нет товаров.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Категория</th><th>Товар</th><th>Ед.</th><th>Заметка</th><th></th></tr></thead>
+    <tbody>
+    {% for p in products %}
+      <tr>
+        <td>{{ p.category_name }}</td>
+        <td>{{ p.name }}</td>
+        <td>{{ p.unit }}</td>
+        <td class="muted">{{ p.notes }}</td>
+        <td>
+          <form method="post" action="/catalog/products/{{ p.id }}/delete" onsubmit="return confirm('Удалить товар?')">
+            <button class="btn danger small" type="submit">Удалить</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

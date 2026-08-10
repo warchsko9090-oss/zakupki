@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Обзор — {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Обзор</h1>
+<p class="lead">Каталог → поставщики → запрос КП по почте → сводка цен и сроков.</p>
+
+<div class="grid grid-4">
+  <div class="panel"><div class="stat">{{ stats.categories }}</div><div class="stat-label">Категории</div></div>
+  <div class="panel"><div class="stat">{{ stats.products }}</div><div class="stat-label">Товары</div></div>
+  <div class="panel"><div class="stat">{{ stats.suppliers }}</div><div class="stat-label">Поставщики</div></div>
+  <div class="panel"><div class="stat">{{ stats.replies }}</div><div class="stat-label">Ответы</div></div>
+</div>
+
+<div class="actions">
+  <a class="btn" href="/rfq/new">Новый запрос КП</a>
+  <a class="btn secondary" href="/catalog">Каталог</a>
+  <a class="btn secondary" href="/suppliers">Поставщики</a>
+</div>
+
+<div class="panel">
+  <h2>Последние запросы</h2>
+  {% if not recent %}
+    <p class="muted">Пока пусто — создайте первый запрос.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Название</th><th>Статус</th><th>Создан</th><th></th></tr></thead>
+    <tbody>
+    {% for r in recent %}
+      <tr>
+        <td>{{ r.title }}</td>
+        <td><span class="badge {{ r.status }}">{{ r.status }}</span></td>
+        <td class="pill-muted">{{ r.created_at[:16].replace('T',' ') }}</td>
+        <td><a href="/rfq/{{ r.id }}">Открыть</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <p class="muted" style="margin:0">
+    Почта: {% if mail_ready %}<strong>настроена</strong>{% else %}<strong>не настроена</strong> — укажите MAIL_USER / MAIL_PASSWORD в .env{% endif %}
+    · AI-разбор: {% if ai_ready %}вкл.{% else %}эвристики (без ключа){% endif %}
+  </p>
+</div>
+{% endblock %}

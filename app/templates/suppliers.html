@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Поставщики — {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Поставщики</h1>
+<p class="lead">Контакты и ассортимент: какие товары может поставить каждый контрагент.</p>
+
+<div class="panel">
+  <h2>Добавить поставщика</h2>
+  <form method="post" action="/suppliers" class="stack">
+    <div class="row">
+      <div class="field"><label>Название</label><input type="text" name="name" required /></div>
+      <div class="field"><label>Email</label><input type="email" name="email" required /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Контактное лицо</label><input type="text" name="contact_person" /></div>
+      <div class="field"><label>Телефон</label><input type="text" name="phone" /></div>
+    </div>
+    <div class="field"><label>Заметки</label><input type="text" name="notes" /></div>
+    <div class="field">
+      <label>Ассортимент (товары)</label>
+      <div class="check-list">
+        {% for p in products %}
+          <label><input type="checkbox" name="product_ids" value="{{ p.id }}" /> {{ p.category_name }} — {{ p.name }}</label>
+        {% else %}
+          <p class="muted">Сначала добавьте товары в каталоге.</p>
+        {% endfor %}
+      </div>
+    </div>
+    <button class="btn" type="submit">Сохранить</button>
+  </form>
+</div>
+
+{% for s in suppliers %}
+<div class="panel">
+  <h2>{{ s.name }}</h2>
+  <p class="muted">{{ s.email }}{% if s.contact_person %} · {{ s.contact_person }}{% endif %}{% if s.phone %} · {{ s.phone }}{% endif %}</p>
+  <form method="post" action="/suppliers/{{ s.id }}" class="stack">
+    <div class="row">
+      <div class="field"><label>Название</label><input type="text" name="name" value="{{ s.name }}" required /></div>
+      <div class="field"><label>Email</label><input type="email" name="email" value="{{ s.email }}" required /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Контактное лицо</label><input type="text" name="contact_person" value="{{ s.contact_person }}" /></div>
+      <div class="field"><label>Телефон</label><input type="text" name="phone" value="{{ s.phone }}" /></div>
+    </div>
+    <div class="field"><label>Заметки</label><input type="text" name="notes" value="{{ s.notes }}" /></div>
+    <div class="field">
+      <label>Ассортимент</label>
+      <div class="check-list">
+        {% for p in products %}
+          <label>
+            <input type="checkbox" name="product_ids" value="{{ p.id }}" {% if p.id in s.product_ids %}checked{% endif %} />
+            {{ p.category_name }} — {{ p.name }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">Обновить</button>
+    </div>
+  </form>
+  <form method="post" action="/suppliers/{{ s.id }}/delete" onsubmit="return confirm('Удалить поставщика?')">
+    <button class="btn danger small" type="submit">Удалить</button>
+  </form>
+</div>
+{% else %}
+<div class="panel"><p class="muted">Поставщиков пока нет.</p></div>
+{% endfor %}
+{% endblock %}
