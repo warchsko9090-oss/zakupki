@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Чаты с поставщиками — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="topbar" style="margin-bottom:0.5rem">
+  <div>
+    <h1 style="margin:0">Чаты</h1>
+    <p class="muted" style="margin:0.3rem 0 0">Прямая переписка с постоянными поставщиками — без отдельного запроса КП.</p>
+  </div>
+  <a class="btn" href="/chats/new">Новый чат</a>
+</div>
+
+<div class="panel">
+  {% if chats %}
+  <table>
+    <thead>
+      <tr><th>Чат</th><th>Поставщик</th><th>Сообщ.</th><th>Файлы</th><th>Обновлён</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for c in chats %}
+      <tr>
+        <td><strong>{{ c.title }}</strong>
+          {% if c.unread_count %}<span class="new-tag">+{{ c.unread_count }} новое</span>{% endif %}
+          <br /><span class="pill-muted">[CHAT-{{ c.token }}]</span>
+        </td>
+        <td>{{ c.supplier_name }}<br /><span class="muted">{{ c.supplier_email }}</span></td>
+        <td>{{ c.msg_count }}{% if c.unread_count %} <span class="new-tag">{{ c.unread_count }}</span>{% endif %}</td>
+        <td>{{ c.file_count }}</td>
+        <td class="pill-muted">{{ c.updated_at[:16].replace('T',' ') }}</td>
+        <td><a href="/chats/{{ c.id }}">Открыть</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Пока нет чатов. Создайте — выберите поставщика и позиции.</p>
+  {% endif %}
+</div>
+{% endblock %}

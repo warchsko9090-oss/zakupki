@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Новый чат — {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Новый чат с поставщиком</h1>
+<p class="lead">
+  Можно взять общую позицию из каталога и дописать в заказе, что именно нужно
+  (трубы, листы и т.п.) — отдельную номенклатуру заводить не обязательно.
+  После отправки формы ассистент подготовит редактируемое первое письмо.
+</p>
+
+<form method="post" action="/chats/preview" class="stack" id="chat-new-form">
+  <div class="panel">
+    <div class="field">
+      <label>Поставщик</label>
+      <select name="supplier_id" required>
+        <option value="">— выберите —</option>
+        {% for s in suppliers %}
+          <option value="{{ s.id }}">{{ s.name }} — {{ s.email }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>Название чата (опционально)</label>
+      <input type="text" name="title" placeholder="Например: Стройматериалы на склад" />
+    </div>
+    <div class="field">
+      <label>Заметка (внутренняя)</label>
+      <input type="text" name="notes" />
+    </div>
+    <div class="field">
+      <label>Условия для поставщика (в письмо и аналитику)</label>
+      <textarea name="letter_conditions" rows="4" placeholder="Срок, доставка, оплата, особые требования…"></textarea>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Позиции из каталога (опционально)</h2>
+    <p class="muted">Отметьте общие позиции — детали заказа допишите ниже в свободных строках.</p>
+    <table>
+      <thead><tr><th></th><th>Товар</th><th>Кол-во</th><th>Ед.</th><th>Комментарий</th></tr></thead>
+      <tbody>
+      {% for p in products %}
+        <tr>
+          <td><input type="checkbox" name="product_id" value="{{ p.id }}" class="prod-check" /></td>
+          <td>{{ p.category_name }} — <strong>{{ p.name }}</strong></td>
+          <td style="width:100px"><input type="number" name="quantity" value="1" min="0.01" step="0.01" /></td>
+          <td style="width:80px"><input type="text" name="unit" value="{{ p.unit }}" /></td>
+          <td><input type="text" name="item_note" placeholder="уточнение к каталожной позиции" /></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">В каталоге нет товаров.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Свободные строки заказа</h2>
+    <p class="muted">Что именно нужно, сколько и комментарий — без заведения каждой SKU в каталоге.</p>
+    <div id="free-rows" class="stack"></div>
+    <button class="btn secondary small" type="button" id="add-free">+ Добавить строку</button>
+  </div>
+
+  <div class="panel">
+    <div class="field">
+      <label>Пожелание к тону первого письма (для AI)</label>
+      <input type="text" name="ai_hint" placeholder="Короче, на «вы», без канцелярита" {% if not ai_ready %}disabled{% endif %} />
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" type="submit">Дальше: черновик письма</button>
+    <a class="btn secondary" href="/chats">Отмена</a>
+  </div>
+</form>
+
+<template id="free-row-tpl">
+  <div class="row free-row" style="align-items:end;gap:0.5rem">
+    <div class="field" style="flex:2">
+      <label>Что заказать</label>
+      <input type="text" name="free_name" placeholder="Труба ПНД 32 мм / лист оцинк. 0.5" required />
+    </div>
+    <div class="field" style="width:110px">
+      <label>Кол-во</label>
+      <input type="number" name="free_qty" value="1" min="0.01" step="0.01" />
+    </div>
+    <div class="field" style="width:90px">
+      <label>Ед.</label>
+      <input type="text" name="free_unit" value="шт" />
+    </div>
+    <div class="field" style="flex:2">
+      <label>Комментарий</label>
+      <input type="text" name="free_note" placeholder="длина, марка, цвет…" />
+    </div>
+    <button class="btn danger small" type="button" data-remove>✕</button>
+  </div>
+</template>
+
+<script>
+(function () {
+  var box = document.getElementById('free-rows');
+  var tpl = document.getElementById('free-row-tpl');
+  function addRow(prefill) {
+    var node = tpl.content.cloneNode(true);
+    var row = node.querySelector('.free-row');
+    if (prefill) {
+      row.querySelector('[name=free_name]').value = prefill.name || '';
+      row.querySelector('[name=free_qty]').value = prefill.qty || 1;
+      row.querySelector('[name=free_unit]').value = prefill.unit || 'шт';
+      row.querySelector('[name=free_note]').value = prefill.note || '';
+    }
+    row.querySelector('[data-remove]').addEventListener('click', function () {
+      row.remove();
+    });
+    // free rows are optional unless present — remove required if we want empty ok
+    row.querySelector('[name=free_name]').required = false;
+    box.appendChild(row);
+  }
+  document.getElementById('add-free').addEventListener('click', function () { addRow(); });
+  addRow();
+
+  document.getElementById('chat-new-form').addEventListener('submit', function () {
+    document.querySelectorAll('tbody tr').forEach(function (tr) {
+      var cb = tr.querySelector('.prod-check');
+      if (cb && !cb.checked) {
+        tr.querySelectorAll('input[name=quantity], input[name=unit], input[name=item_note]').forEach(function (el) {
+          el.disabled = true;
+        });
+      }
+    });
+    // drop empty free rows
+    box.querySelectorAll('.free-row').forEach(function (row) {
+      var name = (row.querySelector('[name=free_name]').value || '').trim();
+      if (!name) row.remove();
+    });
+  });
+})();
+</script>
+{% endblock %}

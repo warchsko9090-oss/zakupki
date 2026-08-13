@@ -2,7 +2,7 @@
 {% block title %}Новый запрос — {{ app_name }}{% endblock %}
 {% block content %}
 <h1>Новый запрос КП</h1>
-<p class="lead">Выберите товары и поставщиков — письма сформируются по шаблону и уйдут с Яндекс.Почты.</p>
+<p class="lead">Выберите товары — поставщики подтянутся по закреплённым категориям. Письма сначала на проверку.</p>
 
 <form method="post" action="/rfq/new" class="stack" id="rfq-form">
   <div class="panel">
@@ -12,7 +12,7 @@
         <input type="text" name="title" value="Запрос КП" placeholder="Например: Крепёж на март" required />
       </div>
       <div class="field">
-        <label>Заметка (внутренняя)</label>
+        <label>Заметка (внутренняя, не в письме)</label>
         <input type="text" name="notes" />
       </div>
     </div>
@@ -20,13 +20,15 @@
 
   <div class="panel">
     <h2>Товары</h2>
-    <p class="muted">Отметьте позиции и укажите количество.</p>
     <table>
       <thead><tr><th></th><th>Товар</th><th>Кол-во</th><th>Ед.</th><th>Комментарий в письме</th></tr></thead>
       <tbody>
       {% for p in products %}
         <tr>
-          <td><input type="checkbox" name="product_id" value="{{ p.id }}" class="prod-check" data-unit="{{ p.unit }}" /></td>
+          <td>
+            <input type="checkbox" name="product_id" value="{{ p.id }}" class="prod-check"
+              data-category-id="{{ p.category_id }}" />
+          </td>
           <td>{{ p.category_name }} — <strong>{{ p.name }}</strong></td>
           <td style="width:100px"><input type="number" name="quantity" value="1" min="0.01" step="0.01" /></td>
           <td style="width:80px"><input type="text" name="unit" value="{{ p.unit }}" /></td>
@@ -40,35 +42,111 @@
   </div>
 
   <div class="panel">
-    <h2>Поставщики</h2>
-    <p class="muted">Показаны все; логично выбирать тех, у кого есть нужный ассортимент.</p>
-    <div class="check-list">
+    <h2>Поставщики по категориям выбранных товаров</h2>
+    <p class="muted" id="supplier-hint">Отметьте товары выше — появятся поставщики, закреплённые за этими категориями.</p>
+    <div class="check-list" id="supplier-list">
       {% for s in suppliers %}
-        <label>
-          <input type="checkbox" name="supplier_id" value="{{ s.id }}" />
+        <label class="supplier-row" data-category-ids="{{ s.category_ids | join(',') }}" hidden>
+          <input type="checkbox" name="supplier_id" value="{{ s.id }}" class="sup-check" disabled />
           <span>
             <strong>{{ s.name }}</strong> — {{ s.email }}
-            {% if s.products %}
-              <span class="pill-muted">({{ s.products | map(attribute='name') | join(', ') }})</span>
+            {% if s.category_names %}
+              <span class="muted">({{ s.category_names | join(', ') }})</span>
             {% endif %}
           </span>
         </label>
       {% else %}
-        <p class="muted">Нет поставщиков.</p>
+        <p class="muted">Нет поставщиков. Найдите через <a href="/search">Поиск AI</a> и привяжите к товарам.</p>
       {% endfor %}
+    </div>
+    <p class="muted" id="supplier-empty" hidden>Нет поставщиков для выбранных категорий. Привяжите поставщиков к товарам в справочнике.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Условия для письма</h2>
+    <p class="muted">
+      Сюда — уникальные требования именно этого запроса (производитель, Меркурий, адрес/срок доставки, оплата и т.п.).
+      Они попадут в письмо по шаблону. Если включите AI — он вплетёт их в текст, а не выкинет.
+    </p>
+    <div class="field">
+      <label>Условия и требования (в письмо)</label>
+      <textarea name="letter_conditions" rows="7" placeholder="Например:&#10;— производитель строго Буйский химзавод;&#10;— снят с учёта в «Меркурий»;&#10;— доставка: Тульская обл., Одоевский р-н, до 20.08;&#10;— оплата планируется 17.08."></textarea>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Генерация текста</h2>
+    <p class="muted">
+      Основа — <a href="/settings#template">шаблон</a> + ваши условия выше.
+      AI (по желанию) только сглаживает формулировки, сохраняя факты.
+    </p>
+    <label class="field" style="display:flex;gap:0.5rem;align-items:center;color:inherit">
+      <input type="checkbox" name="use_ai" value="1" {% if not ai_ready %}disabled{% endif %} {% if ai_ready %}checked{% endif %} />
+      Доработать письмо через AI (условия сохраняются)
+    </label>
+    <div class="field">
+      <label>Пожелания к тону (не факты)</label>
+      <input type="text" name="ai_hint" placeholder="Короче, на «вы», без канцелярита" {% if not ai_ready %}disabled{% endif %} />
     </div>
   </div>
 
   <div class="actions">
-    <button class="btn" type="submit" name="send_now" value="1">Сформировать и отправить</button>
-    <button class="btn secondary" type="submit" name="send_now" value="0">Сохранить черновик</button>
+    <button class="btn" type="submit">Создать черновик на проверку</button>
     <a class="btn secondary" href="/rfq">Отмена</a>
   </div>
 </form>
 
 <script>
-  // Keep quantity/unit/note aligned with checked products: server reads parallel lists.
-  // Unchecked rows still submit empty parallel fields — strip unchecked before submit.
+(function () {
+  function selectedCategoryIds() {
+    var ids = {};
+    document.querySelectorAll('.prod-check:checked').forEach(function (cb) {
+      var cid = cb.getAttribute('data-category-id');
+      if (cid) ids[cid] = true;
+    });
+    return ids;
+  }
+
+  function refreshSuppliers() {
+    var cats = selectedCategoryIds();
+    var anyProduct = Object.keys(cats).length > 0;
+    var visible = 0;
+    document.querySelectorAll('.supplier-row').forEach(function (row) {
+      var raw = (row.getAttribute('data-category-ids') || '').split(',');
+      var match = false;
+      if (anyProduct) {
+        raw.forEach(function (cid) {
+          if (cid && cats[cid]) match = true;
+        });
+      }
+      var input = row.querySelector('.sup-check');
+      if (match) {
+        row.hidden = false;
+        if (input) input.disabled = false;
+        visible += 1;
+      } else {
+        row.hidden = true;
+        if (input) {
+          input.checked = false;
+          input.disabled = true;
+        }
+      }
+    });
+    var hint = document.getElementById('supplier-hint');
+    var empty = document.getElementById('supplier-empty');
+    if (hint) {
+      hint.textContent = anyProduct
+        ? (visible ? 'Показаны поставщики категорий выбранных товаров.' : '')
+        : 'Отметьте товары выше — появятся поставщики, закреплённые за этими категориями.';
+    }
+    if (empty) empty.hidden = !(anyProduct && visible === 0);
+  }
+
+  document.querySelectorAll('.prod-check').forEach(function (cb) {
+    cb.addEventListener('change', refreshSuppliers);
+  });
+  refreshSuppliers();
+
   document.getElementById('rfq-form').addEventListener('submit', function () {
     document.querySelectorAll('tbody tr').forEach(function (tr) {
       var cb = tr.querySelector('.prod-check');
@@ -80,5 +158,6 @@
       }
     });
   });
+})();
 </script>
 {% endblock %}

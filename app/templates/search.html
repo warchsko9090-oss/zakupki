@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Поиск поставщиков AI — {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Поиск поставщиков</h1>
+<p class="lead">
+  Опишите позицию как в чате — ассистент определит <strong>сферу</strong> (одну нишу рынка),
+  найдёт производителей, дистрибьюторов и опт этой сферы, а смежные рынки отсечёт
+  (например, удобрения для растений ≠ для скота).
+  Нужен бесплатный <code>AI_API_KEY</code> (Google AI Studio).
+</p>
+
+{% if not ai_ready %}
+<div class="flash err">
+  AI не настроен. Добавьте ключ в <code>.env</code>:
+  <code>AI_API_KEY=...</code> с <a href="https://aistudio.google.com" target="_blank" rel="noopener">aistudio.google.com</a>,
+  затем перезапустите приложение через <code>start.bat</code>.
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>Новый запрос</h2>
+  <form method="post" action="/search" class="stack">
+    <div class="field">
+      <label>Что ищем (как сообщение менеджеру)</label>
+      <textarea name="query" rows="4" required placeholder="Например: Найди поставщиков нержавеющего крепежа М10 в ЦФО, нужны сайт, email и ориентир цены за кг"></textarea>
+    </div>
+    <div class="field">
+      <label>Привязать к номенклатуре (опционально)</label>
+      <select name="product_id">
+        <option value="">— без привязки —</option>
+        {% for p in products %}
+          <option value="{{ p.id }}">{{ p.category_name }} — {{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn" type="submit" {% if not ai_ready %}disabled{% endif %}>Запустить поиск</button>
+  </form>
+  <p class="pill-muted">Поиск шире SKU: сфера целиком (производители/дистрибьюторы), но без чужих ниш. Обычно 40–120 секунд.</p>
+</div>
+
+<div class="panel">
+  <h2>История</h2>
+  {% if not sessions %}
+    <p class="muted">Пока пусто.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Запрос</th><th>Статус</th><th>Дата</th><th></th></tr></thead>
+    <tbody>
+    {% for s in sessions %}
+      <tr>
+        <td>{{ s.query[:120] }}{% if s.query|length > 120 %}…{% endif %}</td>
+        <td><span class="badge {{ s.status }}">{{ s.status }}</span></td>
+        <td class="pill-muted">{{ s.created_at[:16].replace('T',' ') }}</td>
+        <td><a href="/search/{{ s.id }}">Отчёт</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

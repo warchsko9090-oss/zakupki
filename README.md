@@ -12,15 +12,22 @@
 4. **Ответы** — опрос IMAP, сопоставление по коду `[RFQ-…]` в теме  
 5. **Сводка** — таблица цен/сроков и столбчатый график сравнения  
 
-## Быстрый старт (локально)
+## Быстрый старт (Windows)
+
+**Самый простой способ** — двойной клик по `start.bat`  
+(или в cmd: `start.bat`).
+
+Не вызывайте голый `uvicorn`: в cmd после `Activate.ps1` команда не попадает в PATH.  
+Скрипт сам берёт `.venv\Scripts\uvicorn.exe`.
+
+PowerShell:
 
 ```powershell
 cd C:\Users\warch\Downloads\zakupki
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-copy .env.example .env
+.\start.ps1
 ```
+
+Откройте http://127.0.0.1:3001
 
 В `.env` укажите:
 
@@ -31,16 +38,15 @@ MAIL_USER=you@yandex.ru
 MAIL_PASSWORD=пароль_приложения_яндекса
 MAIL_FROM=you@yandex.ru
 SENDER_NAME=Иван Иванов
-SENDER_COMPANY=ООО Ромашка
+AI_API_KEY=ключ_из_Google_AI_Studio
 ```
 
-Запуск:
+## AI-ассистенты (бесплатный Gemini)
 
-```powershell
-uvicorn app.main:app --host 127.0.0.1 --port 3000 --reload
-```
+1. **Поиск поставщиков** (`/search`) — чатовый запрос → веб-поиск → разбор сайтов AI → отчёт (сайт, контакты, цена) → кнопка «Добавить в базу» с привязкой к номенклатуре.  
+2. **Письма КП** — AI пишет черновик → вы правите на странице запроса → только потом «Отправить».
 
-Откройте http://127.0.0.1:3000
+Ключ: [Google AI Studio](https://aistudio.google.com) → Get API key → `AI_API_KEY` в `.env`.
 
 ## Яндекс.Почта
 

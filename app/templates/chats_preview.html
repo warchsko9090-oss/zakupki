@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Черновик первого письма — {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Черновик первого письма</h1>
+<p class="lead">
+  Проверьте и поправьте текст. Код чата подставится при создании.
+  {% if letter_source == 'ai' %}<span class="badge replied">AI</span>{% else %}<span class="badge pending">шаблон</span>{% endif %}
+</p>
+
+<div class="panel">
+  <p><strong>Поставщик:</strong> {{ supplier.name }} — {{ supplier.email }}</p>
+  {% if title %}<p><strong>Чат:</strong> {{ title }}</p>{% endif %}
+  <h3 style="margin-top:0.75rem;font-size:1rem">Позиции</h3>
+  <ul class="cmp-list">
+  {% for it in items %}
+    <li>
+      {{ it.custom_name or it.name }} — {{ it.quantity }} {{ it.unit }}
+      {% if it.note %}<span class="muted">({{ it.note }})</span>{% endif %}
+    </li>
+  {% else %}
+    <li class="muted">Без позиций (можно уточнить в письме)</li>
+  {% endfor %}
+  </ul>
+  {% if letter_conditions %}
+  <p class="muted" style="margin-top:0.5rem"><strong>Условия:</strong> {{ letter_conditions }}</p>
+  {% endif %}
+</div>
+
+<form method="post" action="/chats/confirm" class="stack">
+  <input type="hidden" name="supplier_id" value="{{ supplier.id }}" />
+  <input type="hidden" name="title" value="{{ title }}" />
+  <input type="hidden" name="notes" value="{{ notes }}" />
+  <input type="hidden" name="letter_conditions" value="{{ letter_conditions }}" />
+  <textarea name="items_json" hidden>{{ items_json }}</textarea>  <div class="panel">
+    <div class="field">
+      <label>Тема</label>
+      <input type="text" name="subject" value="{{ subject }}" required />
+    </div>
+    <div class="field">
+      <label>Текст первого письма</label>
+      <textarea name="body" rows="16" required>{{ body }}</textarea>
+    </div>
+    <label class="field" style="display:flex;gap:0.5rem;align-items:center;color:inherit">
+      <input type="checkbox" name="send_now" value="1" {% if mail_ready %}checked{% endif %} {% if not mail_ready %}disabled{% endif %} />
+      Сразу отправить поставщику
+    </label>
+  </div>
+  <div class="actions">
+    <button class="btn" type="submit">Создать чат</button>
+    <a class="btn secondary" href="/chats/new">Назад</a>
+  </div>
+</form>
+{% endblock %}

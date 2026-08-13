@@ -6,28 +6,99 @@
 {% block content %}
 {% set rfq = matrix.rfq %}
 <div class="topbar" style="margin-bottom:0.5rem">
-  <div>
-    <h1 style="margin:0">{{ rfq.title }}</h1>
+  <div style="flex:1;min-width:220px">
+    <form method="post" action="/rfq/{{ rfq.id }}/rename" class="row" style="align-items:end;gap:0.5rem;margin:0">
+      <input type="hidden" name="next" value="/rfq/{{ rfq.id }}" />
+      <div class="field" style="flex:2;margin:0">
+        <label>Название запроса</label>
+        <input type="text" name="title" value="{{ rfq.title }}" required />
+      </div>
+      <button class="btn secondary small" type="submit">Переименовать</button>
+    </form>
     <p class="muted" style="margin:0.3rem 0 0">
       <span class="badge {{ rfq.status }}">{{ rfq.status }}</span>
-      · создан {{ rfq.created_at[:16].replace('T',' ') }}
+      · {{ rfq.created_at[:10] }}
       {% if rfq.sent_at %}· отправлен {{ rfq.sent_at[:16].replace('T',' ') }}{% endif %}
     </p>
   </div>
   <div class="actions" style="margin:0">
-    {% if rfq.status in ['draft'] or rfq.messages|selectattr('status','equalto','pending')|list %}
-      <form method="post" action="/rfq/{{ rfq.id }}/send">
+    {% set pending = rfq.messages | selectattr('status', 'equalto', 'pending') | list %}
+    {% set errored = rfq.messages | selectattr('status', 'equalto', 'error') | list %}
+    {% if pending or errored %}
+      <form method="post" action="/rfq/{{ rfq.id }}/send" onsubmit="return confirm('Отправить все непроверенные? Убедитесь, что тексты писем ок.')">
         <button class="btn" type="submit">Отправить письма</button>
       </form>
     {% endif %}
     <form method="post" action="/rfq/{{ rfq.id }}/poll">
       <button class="btn secondary" type="submit">Проверить почту</button>
     </form>
+    <form method="post" action="/rfq/{{ rfq.id }}/delete" onsubmit="return confirm('Удалить этот запрос вместе с письмами и ответами?');">
+      <button class="btn danger" type="submit">Удалить</button>
+    </form>
     <a class="btn secondary" href="/rfq">К списку</a>
   </div>
 </div>
+<p class="pill-muted" style="margin-top:0">Новые ответы подтягиваются автоматически каждые несколько минут (если включено в Настройках). Кнопка — для немедленной проверки.</p>
 
-{% if rfq.notes %}<p class="lead">{{ rfq.notes }}</p>{% endif %}
+{% if rfq.notes %}<p class="lead">Внутренняя заметка: {{ rfq.notes }}</p>{% endif %}
+
+{% if rfq.letter_conditions %}
+<details class="acc">
+  <summary>
+    <span>Условия этого запроса</span>
+    <span class="pill-muted">нажмите, чтобы раскрыть</span>
+  </summary>
+  <div class="acc-body">
+    <div class="pre soft">{{ rfq.letter_conditions }}</div>
+  </div>
+</details>
+{% endif %}
+
+{% if matrix.draft_messages %}
+<div class="panel">
+  <h2>Черновики перед отправкой</h2>
+  <p class="muted">AI опирается на шаблон и условия: правит формулировки, факты не выдумывает.</p>
+  <form method="post" action="/rfq/{{ rfq.id }}/ai-draft" class="row" style="align-items:end">
+    <div class="field" style="flex:2">
+      <label>Пожелание к тону (ко всем черновикам)</label>
+      <input type="text" name="ai_hint" placeholder="Короче, на «вы», срочность до пятницы" {% if not ai_ready %}disabled{% endif %} />
+    </div>
+    <button class="btn secondary" type="submit" {% if not ai_ready %}disabled{% endif %}>AI: доработать с учётом условий</button>
+  </form>
+</div>
+
+{% for m in matrix.draft_messages %}
+<details class="acc" open>
+  <summary>
+    <span>
+      {{ m.supplier_name }}
+      <span class="badge {{ m.status }}">{{ m.status }}</span>
+    </span>
+    <span class="pill-muted">{{ m.supplier_email }} · [RFQ-{{ m.token }}]</span>
+  </summary>
+  <div class="acc-body">
+    <form method="post" action="/rfq/{{ rfq.id }}/messages/{{ m.id }}" class="stack">
+      <div class="field">
+        <label>Тема</label>
+        <input type="text" name="subject" value="{{ m.subject }}" required />
+      </div>
+      <div class="field">
+        <label>Текст</label>
+        <textarea name="body" rows="12" required>{{ m.body }}</textarea>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">Сохранить правки</button>
+      </div>
+    </form>
+    <form method="post" action="/rfq/{{ rfq.id }}/ai-draft" style="margin-top:0.5rem">
+      <input type="hidden" name="message_id" value="{{ m.id }}" />
+      <button class="btn secondary small" type="submit" {% if not ai_ready %}disabled{% endif %}>AI с учётом условий</button>
+    </form>
+    {% if m.error %}<p class="flash err" style="margin-top:0.5rem">{{ m.error }}</p>{% endif %}
+  </div>
+</details>
+{% endfor %}
+{% endif %}
 
 <div class="grid grid-2">
   <div class="panel">
@@ -35,7 +106,7 @@
     <table>
       <thead><tr><th>Товар</th><th>Кол-во</th><th>Комментарий</th></tr></thead>
       <tbody>
-      {% for it in rfq.items %}
+      {% for it in rfq.line_items %}
         <tr>
           <td>{{ it.category_name }} — {{ it.product_name }}</td>
           <td>{{ it.quantity }} {{ it.unit }}</td>
@@ -46,16 +117,15 @@
     </table>
   </div>
   <div class="panel">
-    <h2>Письма поставщикам</h2>
+    <h2>Статус рассылки</h2>
     <table>
-      <thead><tr><th>Поставщик</th><th>Статус</th><th>Ответы</th><th>Токен</th></tr></thead>
+      <thead><tr><th>Поставщик</th><th>Статус</th><th>Ответы</th></tr></thead>
       <tbody>
       {% for m in rfq.messages %}
         <tr>
-          <td>{{ m.supplier_name }}<br /><span class="pill-muted">{{ m.supplier_email }}</span></td>
-          <td><span class="badge {{ m.status }}">{{ m.status }}</span>{% if m.error %}<br /><span class="pill-muted">{{ m.error }}</span>{% endif %}</td>
+          <td>{{ m.supplier_name }}</td>
+          <td><span class="badge {{ m.status }}">{{ m.status }}</span></td>
           <td>{{ m.replies }}</td>
-          <td><code>[RFQ-{{ m.token }}]</code></td>
         </tr>
       {% endfor %}
       </tbody>
@@ -64,11 +134,102 @@
 </div>
 
 <div class="panel">
-  <h2>Сводка цен и сроков</h2>
-  {% if not matrix.chart %}
+  <h2>Добавить поставщиков</h2>
+  <p class="muted">
+    Показываются поставщики, у которых в ассортименте есть товары из категорий этого запроса
+    {% if matrix.rfq_category_names %}(<strong>{{ matrix.rfq_category_names | join(', ') }}</strong>){% endif %}.
+    После добавления появится черновик первого письма — проверьте и нажмите «Отправить письма».
+  </p>
+  {% if matrix.candidate_suppliers %}
+  <form method="post" action="/rfq/{{ rfq.id }}/add-suppliers" class="stack">
+    <div class="check-list">
+      {% for s in matrix.candidate_suppliers %}
+        <label>
+          <input type="checkbox" name="supplier_id" value="{{ s.id }}" />
+          <span>
+            <strong>{{ s.name }}</strong> — {{ s.email }}
+            {% if s.category_names %}
+              <span class="muted">({{ s.category_names | join(', ') }})</span>
+            {% endif %}
+          </span>
+        </label>
+      {% endfor %}
+    </div>
+    <label class="field" style="display:flex;gap:0.5rem;align-items:center;color:inherit">
+      <input type="checkbox" name="use_ai" value="1" {% if not ai_ready %}disabled{% endif %} />
+      Доработать новые письма через AI
+    </label>
+    <div class="field">
+      <label>Пожелание к тону (только для новых)</label>
+      <input type="text" name="ai_hint" placeholder="Короче, на «вы»" {% if not ai_ready %}disabled{% endif %} />
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">Добавить и подготовить первое письмо</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="muted">
+    {% if matrix.eligible_supplier_count %}
+      Все подходящие поставщики ({{ matrix.eligible_supplier_count }}) уже в этом запросе.
+    {% else %}
+      Нет поставщиков с товарами в категориях
+      {% if matrix.rfq_category_names %}«{{ matrix.rfq_category_names | join('», «') }}»{% else %}запроса{% endif %}.
+      В поиске или в карточке поставщика отметьте нужные товары номенклатуры (не только название категории).
+    {% endif %}
+    <a href="/suppliers">Открыть поставщиков</a> · <a href="/search">Поиск AI</a>
+  </p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Сводка цен, объёма и условий</h2>
+  {% if not matrix.chart and not matrix.has_comparison %}
     <p class="muted">Пока нет оцифрованных ответов. Нажмите «Проверить почту» после ответов поставщиков.</p>
   {% else %}
+  {% if matrix.has_comparison %}
+  <div class="stack" style="margin-bottom:1rem">
+    {% for s in matrix.suppliers %}
+      {% if s.latest_comparison or s.latest_summary %}
+      <div class="cmp-card">
+        <strong>{{ s.supplier_name }}</strong>
+        {% if s.latest_comparison and s.latest_comparison.verdict %}
+          <span class="badge {% if s.latest_comparison.quantity_ok %}replied{% else %}pending{% endif %}">{{ s.latest_comparison.verdict }}</span>
+        {% endif %}
+        {% if s.latest_summary %}<p style="margin:0.4rem 0 0">{{ s.latest_summary }}</p>{% endif %}
+        {% if s.latest_comparison %}
+          {% if s.latest_comparison.highlights %}
+          <ul class="cmp-list">
+            {% for h in s.latest_comparison.highlights %}<li>{{ h }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+          {% if s.latest_comparison.mismatches %}
+          <table class="cmp-table">
+            <thead><tr><th>Условие</th><th>Запрос</th><th>Ответ</th><th></th></tr></thead>
+            <tbody>
+            {% for m in s.latest_comparison.mismatches %}
+              <tr>
+                <td>{{ m.aspect }}</td>
+                <td>{{ m.requested }}</td>
+                <td>{{ m.offered }}</td>
+                <td><span class="badge {% if m.status == 'match' %}replied{% elif m.status == 'partial' %}pending{% else %}error{% endif %}">{{ m.status }}</span></td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+          {% endif %}
+          {% if s.latest_comparison.delivery %}<p class="pill-muted">Доставка: {{ s.latest_comparison.delivery }}</p>{% endif %}
+          {% if s.latest_comparison.payment %}<p class="pill-muted">Оплата: {{ s.latest_comparison.payment }}</p>{% endif %}
+          {% if s.latest_comparison.other_conditions %}<p class="pill-muted">Прочее: {{ s.latest_comparison.other_conditions }}</p>{% endif %}
+        {% endif %}
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if matrix.chart %}
   <div class="chart-box"><canvas id="priceChart"></canvas></div>
+  {% else %}
+    <p class="muted">График цен появится, когда в ответе будет распознана цена.</p>
   {% endif %}
 
   <table style="margin-top:1rem">
@@ -83,13 +244,29 @@
     <tbody>
     {% for row in matrix.rows %}
       <tr>
-        <td>{{ row.item.product_name }}<br /><span class="pill-muted">{{ row.item.quantity }} {{ row.item.unit }}</span></td>
+        <td>{{ row.item.product_name }}<br /><span class="pill-muted">запрос: {{ row.item.quantity }} {{ row.item.unit }}</span></td>
         {% for q in row.quotes %}
           <td>
-            {% if q.quote and q.quote.unit_price is not none %}
+            {% if q.quote and (q.quote.unit_price is not none or q.quote.offered_qty is not none or q.quote.notes) %}
+              {% if q.quote.unit_price is not none %}
               <strong>{{ q.quote.unit_price | money }}</strong> {{ q.quote.currency }}
+              {% endif %}
+              {% if q.quote.offered_qty is not none %}
+                <br /><span class="badge {% if q.quote.qty_fit == 'full' %}replied{% elif q.quote.qty_fit == 'partial' %}pending{% else %}error{% endif %}">
+                  {% if q.quote.qty_fit == 'full' %}полный объём
+                  {% elif q.quote.qty_fit == 'partial' %}частично: {{ q.quote.offered_qty }} / {{ row.item.quantity }} {{ row.item.unit }}
+                  {% elif q.quote.qty_fit == 'exceeds' %}больше запроса: {{ q.quote.offered_qty }}
+                  {% elif q.quote.qty_fit == 'none' %}объёма нет
+                  {% else %}объём: {{ q.quote.offered_qty }} {{ row.item.unit }}
+                  {% endif %}
+                </span>
+              {% elif q.quote.qty_fit == 'partial' %}
+                <br /><span class="badge pending">неполный объём</span>
+              {% endif %}
               {% if q.quote.lead_time_days is not none %}<br /><span class="pill-muted">{{ q.quote.lead_time_days }} дн.</span>{% endif %}
               {% if q.quote.in_stock == 1 %}<br /><span class="badge replied">в наличии</span>{% elif q.quote.in_stock == 0 %}<br /><span class="badge pending">под заказ</span>{% endif %}
+              {% if q.quote.delivery_note %}<br /><span class="pill-muted">{{ q.quote.delivery_note }}</span>{% endif %}
+              {% if q.quote.notes %}<br /><span class="pill-muted">{{ q.quote.notes }}</span>{% endif %}
             {% else %}
               <span class="muted">—</span>
             {% endif %}
@@ -99,29 +276,196 @@
     {% endfor %}
     </tbody>
   </table>
+  {% endif %}
 </div>
 
-{% for s in matrix.suppliers %}
-  {% if s.raw_replies %}
-  <div class="panel">
-    <h2>Ответ: {{ s.supplier_name }}</h2>
-    {% for r in s.raw_replies %}
-      <p class="muted">{{ r.received_at[:16].replace('T',' ') }} · {{ r.from_addr }} · разбор: {{ r.parse_status }}</p>
-      <div class="pre">{{ r.raw_body[:4000] }}</div>
-      <form method="post" action="/rfq/{{ rfq.id }}/reparse/{{ r.id }}" style="margin-top:0.5rem">
-        <button class="btn secondary small" type="submit">Переразобрать</button>
-      </form>
-    {% endfor %}
-  </div>
-  {% endif %}
-{% endfor %}
+<h2 style="margin-top:1.25rem">Переписка с поставщиками</h2>
+<p class="muted" style="margin-top:0">Треды свёрнуты. Откройте поставщика, чтобы увидеть историю и написать уточнение (уходит обычным письмом).</p>
 
-{% for m in rfq.messages %}
-<details class="panel">
-  <summary>Черновик письма → {{ m.supplier_name }}</summary>
-  <p><strong>{{ m.subject }}</strong></p>
-  <div class="pre">{{ m.body }}</div>
+{% for thread in matrix.threads %}
+<details class="acc">
+  <summary>
+    <span>
+      {{ thread.supplier_name }}
+      <span class="badge {{ thread.status }}">{{ thread.status }}</span>
+      {% if thread.unread_count %}
+        <span class="new-tag">+{{ thread.unread_count }} новое</span>
+      {% endif %}
+    </span>
+    <span class="pill-muted">
+      {% if thread.latest_summary %}{{ thread.latest_summary[:90] }}{% if thread.latest_summary|length > 90 %}…{% endif %}
+      {% else %}{{ thread.active_email or thread.supplier_email }} · [RFQ-{{ thread.token }}]
+      {% endif %}
+    </span>
+  </summary>
+  <div class="acc-body">
+    <div class="chat">
+      {% for ev in thread.events %}
+        <div class="bubble {{ ev.direction }}{% if ev.is_new %} new-msg{% endif %}">
+          <div class="bubble-meta">
+            {% if ev.direction == 'out' %}Вы{% else %}{{ thread.supplier_name }}{% endif %}
+            · {{ ev.at[:16].replace('T',' ') if ev.at else '' }}
+            {% if ev.is_new %}<span class="new-tag">новое</span>{% endif %}
+            {% if ev.kind == 'followup' %}<span class="badge pending">уточнение</span>{% endif %}
+            {% if ev.to_addr %}<span class="pill-muted">→ {{ ev.to_addr }}</span>{% endif %}
+            {% if ev.from_addr %}<span class="pill-muted">от {{ ev.from_addr }}</span>{% endif %}
+            {% if ev.channel and ev.channel != 'email' %}
+              <span class="badge replied">
+                {% if ev.channel == 'telegram' %}Telegram
+                {% elif ev.channel == 'max' %}Макс
+                {% elif ev.channel == 'whatsapp' %}WhatsApp
+                {% elif ev.channel == 'manual' %}вставка
+                {% else %}{{ ev.channel }}{% endif %}
+              </span>
+            {% endif %}
+            {% if ev.parse_status %}<span class="pill-muted">разбор: {{ ev.parse_status }}</span>{% endif %}
+          </div>
+          {% if ev.subject %}<div class="bubble-subj">{{ ev.subject }}</div>{% endif %}
+          <div class="bubble-text">{{ ev.body }}</div>
+          {% if ev.comparison_summary %}<div class="bubble-note"><strong>Сводка:</strong> {{ ev.comparison_summary }}</div>{% endif %}
+          {% if ev.files %}
+          <div class="bubble-note">
+            {% for f in ev.files %}
+              <a href="/files/{{ f.id }}" target="_blank" rel="noopener">📎 {{ f.kind_label }}: {{ f.filename }}</a>{% if not loop.last %} · {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if ev.reply_id %}
+          <form method="post" action="/rfq/{{ rfq.id }}/reparse/{{ ev.reply_id }}" style="margin-top:0.4rem">
+            <button class="btn secondary small" type="submit">Переразобрать ответ</button>
+          </form>
+          {% endif %}
+          {% if ev.from_addr and ev.from_addr|lower != thread.active_email|lower %}
+          <form method="post" action="/rfq/{{ rfq.id }}/reply-email/{{ thread.message_id }}" class="stack" style="margin-top:0.5rem">
+            <input type="hidden" name="email" value="{{ ev.from_addr }}" />
+            <label style="display:flex;gap:0.5rem;align-items:center;color:inherit;font-size:0.9rem">
+              <input type="checkbox" name="update_supplier" value="1" />
+              Также заменить email в карточке поставщика
+            </label>
+            <button class="btn small" type="submit">Отвечать на {{ ev.from_addr }}</button>
+          </form>
+          {% endif %}
+        </div>
+      {% else %}
+        <p class="muted">Пока пусто — сначала отправьте запрос.</p>
+      {% endfor %}
+    </div>
+
+    {% if thread.from_mismatch and (not thread.reply_email or thread.reply_email|lower != thread.last_from_addr|lower) %}
+    <div class="flash ok" style="margin:0.75rem 0">
+      Ответили с <strong>{{ thread.last_from_addr }}</strong>, а в каталоге —
+      {{ thread.catalog_email }}. Можно переключить адрес для этого чата (или обновить карточку).
+      <form method="post" action="/rfq/{{ rfq.id }}/reply-email/{{ thread.message_id }}" class="stack" style="margin-top:0.5rem">
+        <input type="hidden" name="email" value="{{ thread.last_from_addr }}" />
+        <label style="display:flex;gap:0.5rem;align-items:center;color:inherit">
+          <input type="checkbox" name="update_supplier" value="1" />
+          Также заменить email в карточке поставщика (для новых запросов)
+        </label>
+        <button class="btn small" type="submit">Использовать {{ thread.last_from_addr }} в этом чате</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <div class="followup">
+      <h3 style="margin:0 0 0.4rem;font-size:1rem">Ответ из мессенджера → в аналитику</h3>
+      <p class="pill-muted">Скопируйте сообщение поставщика из Telegram / Макс / WhatsApp и вставьте сюда. AI разберёт цену, объём и условия так же, как письмо.</p>
+      <form method="post" action="/rfq/{{ rfq.id }}/import-reply/{{ thread.message_id }}" class="stack">
+        <div class="field">
+          <label>Откуда ответ</label>
+          <select name="channel">
+            <option value="telegram">Telegram</option>
+            <option value="max">Макс</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="manual">Другое / просто текст</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Текст ответа поставщика</label>
+          <textarea name="body" rows="6" required placeholder="Вставьте сюда переписку или одно сообщение с ценой и условиями…"></textarea>
+        </div>
+        <label class="field" style="display:flex;gap:0.5rem;align-items:center;color:inherit">
+          <input type="checkbox" name="update_conditions" value="1" checked {% if not ai_ready %}disabled{% endif %} />
+          Обновить условия запроса по этой вставке (AI)
+        </label>
+        <div class="actions">
+          <button class="btn" type="submit">Добавить в аналитику</button>
+        </div>
+      </form>
+    </div>
+
+    {% if thread.can_followup %}
+    <div class="followup">
+      <h3 style="margin:0 0 0.4rem;font-size:1rem">Уточнение поставщику</h3>
+      <p class="pill-muted">
+        Код треда [RFQ-{{ thread.token }}] сохранится в теме.
+        {% if thread.reply_email %}
+          Сейчас для чата задан адрес <strong>{{ thread.reply_email }}</strong>
+          (в каталоге: {{ thread.catalog_email }}).
+        {% else %}
+          По умолчанию уходит на адрес из каталога: {{ thread.catalog_email }}.
+        {% endif %}
+      </p>
+      <form method="post" action="/rfq/{{ rfq.id }}/followup/{{ thread.message_id }}" enctype="multipart/form-data" class="stack">
+        <div class="field">
+          <label>Кому (email)</label>
+          <input type="email" name="to_email" value="{{ thread.active_email }}" required
+            placeholder="email@company.ru" list="from-addrs-{{ thread.message_id }}" />
+          {% if thread.last_from_addr or thread.catalog_email %}
+          <datalist id="from-addrs-{{ thread.message_id }}">
+            {% if thread.last_from_addr %}<option value="{{ thread.last_from_addr }}">{% endif %}
+            {% if thread.catalog_email %}<option value="{{ thread.catalog_email }}">{% endif %}
+            {% if thread.reply_email %}<option value="{{ thread.reply_email }}">{% endif %}
+          </datalist>
+          {% endif %}
+        </div>
+        <div class="field">
+          <label>Текст уточнения</label>
+          <textarea name="body" id="fu-body-{{ thread.message_id }}" rows="5" placeholder="Например: уточните, можно ли 250 кг частями?"></textarea>
+        </div>
+        {% if company_accounts %}
+        <div class="field">
+          <label>Реквизиты в письмо</label>
+          <select name="company_account_id">
+            <option value="">— не вставлять —</option>
+            {% for a in company_accounts %}
+              <option value="{{ a.id }}">{{ a.label }}{% if a.is_default %} ★{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="field">
+          <label>Вложения</label>
+          <input type="file" name="files" multiple />
+        </div>
+        <label class="field" style="display:flex;gap:0.5rem;align-items:center;color:inherit">
+          <input type="checkbox" name="remember_email" value="1" checked />
+          Запомнить этот адрес для следующих писем в чате
+        </label>
+        <label class="field" style="display:flex;gap:0.5rem;align-items:center;color:inherit">
+          <input type="checkbox" name="use_ai" value="1" {% if not ai_ready %}disabled{% endif %} {% if ai_ready %}checked{% endif %} />
+          AI: оформить вежливым письмом (факты из текста сохранить)
+        </label>
+        <div class="actions">
+          <button class="btn" type="submit">Отправить уточнение</button>
+        </div>
+      </form>
+      {% if ai_ready %}
+      <form method="post" action="/rfq/{{ rfq.id }}/sync-conditions/{{ thread.message_id }}" style="margin-top:0.75rem">
+        <button class="btn secondary small" type="submit">AI: обновить условия запроса из переписки</button>
+      </form>
+      {% endif %}
+    </div>
+    {% elif ai_ready %}
+    <div class="followup">
+      <form method="post" action="/rfq/{{ rfq.id }}/sync-conditions/{{ thread.message_id }}">
+        <button class="btn secondary small" type="submit">AI: обновить условия запроса из переписки</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
 </details>
+{% else %}
+<p class="muted">Поставщиков в запросе пока нет.</p>
 {% endfor %}
 
 <script>
@@ -138,16 +482,19 @@ if (raw.length && window.Chart) {
     }),
     backgroundColor: palette[i % palette.length],
   }));
-  new Chart(document.getElementById('priceChart'), {
-    type: 'bar',
-    data: { labels: products, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true, title: { display: true, text: 'Цена' } } },
-      plugins: { legend: { position: 'bottom' } }
-    }
-  });
+  const el = document.getElementById('priceChart');
+  if (el) {
+    new Chart(el, {
+      type: 'bar',
+      data: { labels: products, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, title: { display: true, text: 'Цена' } } },
+        plugins: { legend: { position: 'bottom' } }
+      }
+    });
+  }
 }
 </script>
 {% endblock %}

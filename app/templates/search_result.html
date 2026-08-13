@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Отчёт поиска — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="topbar" style="margin-bottom:0.5rem">
+  <div>
+    <h1 style="margin:0">Отчёт поиска</h1>
+    <p class="muted" style="margin:0.3rem 0 0">
+      <span class="badge {{ session.status }}">{{ session.status }}</span>
+      · {{ session.created_at[:16].replace('T',' ') }}
+    </p>
+  </div>
+  <a class="btn secondary" href="/search">Новый поиск</a>
+</div>
+
+<div class="panel">
+  <h2>Запрос менеджера</h2>
+  <p>{{ session.query }}</p>
+  {% if session.summary %}<p class="muted">{{ session.summary }}</p>{% endif %}
+  {% if session.search_meta %}
+  <p class="pill-muted" style="margin-top:0.5rem">
+    {% if session.search_meta.sphere %}
+      Сфера: {{ session.search_meta.sphere }}
+    {% endif %}
+    {% if session.search_meta.queries %}
+      {% if session.search_meta.sphere %} · {% endif %}
+      Запросы: {{ session.search_meta.queries | join(' · ') }}
+    {% endif %}
+    {% if session.search_meta.hits is defined %}
+      · ссылок: {{ session.search_meta.hits | length }}
+    {% elif session.search_meta.hits_count %}
+      · ссылок: {{ session.search_meta.hits_count }}
+    {% endif %}
+    {% if session.search_meta.pages_fetched is defined %}
+      · страниц загружено: {{ session.search_meta.pages_fetched }}
+    {% endif %}
+  </p>
+  {% if session.search_meta.sphere_include or session.search_meta.sphere_exclude %}
+  <p class="muted" style="margin-top:0.35rem">
+    {% if session.search_meta.sphere_include %}
+      Включаем: {{ session.search_meta.sphere_include | join('; ') }}.
+    {% endif %}
+    {% if session.search_meta.sphere_exclude %}
+      Исключаем: {{ session.search_meta.sphere_exclude | join('; ') }}.
+    {% endif %}
+  </p>
+  {% endif %}
+  {% if session.search_meta.hits %}
+  <details class="acc" style="margin-top:0.75rem">
+    <summary><span>Найденные ссылки</span><span class="pill-muted">{{ session.search_meta.hits | length }}</span></summary>
+    <div class="acc-body">
+      <ul class="cmp-list">
+      {% for h in session.search_meta.hits %}
+        <li><a href="{{ h.url }}" target="_blank" rel="noopener">{{ h.title or h.url }}</a></li>
+      {% endfor %}
+      </ul>
+    </div>
+  </details>
+  {% endif %}
+  {% endif %}
+</div>
+
+{% if session.status == 'error' %}
+<div class="flash err">Ошибка: {{ session.summary }}</div>
+{% endif %}
+
+{% for f in session.findings %}
+<div class="panel">
+  <h2>{{ f.company_name }}
+    <span class="badge {{ f.confidence }}">{{ f.confidence }}</span>
+    {% if f.already_in_db or f.added_supplier_id %}
+      <span class="badge replied">уже в базе{% if f.matched_supplier %} — {{ f.matched_supplier.name }}{% elif f.added_supplier_id %} #{{ f.added_supplier_id }}{% endif %}</span>
+    {% endif %}
+  </h2>
+  <table>
+    <tr><th>Сайт</th><td>{% if f.website %}<a href="{{ f.website }}" target="_blank" rel="noopener">{{ f.website }}</a>{% else %}—{% endif %}</td></tr>
+    <tr><th>Email</th><td>{{ f.email or '—' }}</td></tr>
+    <tr><th>Телефон</th><td>{{ f.phone or '—' }}</td></tr>
+    <tr><th>Контакт</th><td>{{ f.contact_person or '—' }}</td></tr>
+    <tr><th>Цена с сайта</th><td>{{ f.price_info or '—' }}</td></tr>
+    <tr><th>Позиция</th><td>{{ f.product_match or '—' }}</td></tr>
+    <tr><th>Источник</th><td>{% if f.source_url %}<a href="{{ f.source_url }}" target="_blank" rel="noopener">{{ f.source_url }}</a>{% else %}—{% endif %}</td></tr>
+    {% if f.notes %}<tr><th>Заметки</th><td>{{ f.notes }}</td></tr>{% endif %}
+  </table>
+
+  {% if f.already_in_db or f.added_supplier_id %}
+  <p class="muted" style="margin-top:0.75rem">
+    Поставщик уже есть в базе — карточку повторно не создаём.
+    {% if f.matched_supplier %}
+      <a href="/suppliers">{{ f.matched_supplier.name }}</a>
+      {% if f.matched_supplier.email %} · {{ f.matched_supplier.email }}{% endif %}
+    {% elif f.added_supplier_id %}
+      <a href="/suppliers">Поставщик #{{ f.added_supplier_id }}</a>
+    {% else %}
+      <a href="/suppliers">Открыть поставщиков</a>
+    {% endif %}
+    Ниже можно допривязать товары — иначе поставщик не попадёт в запросы по категориям.
+  </p>
+  {% endif %}
+  <form method="post" action="/search/findings/{{ f.id }}/add" class="stack" style="margin-top:0.75rem">
+    <input type="hidden" name="session_id" value="{{ session.id }}" />
+    <div class="field">
+      <label>Привязать к номенклатуре (товары)</label>
+      <div class="check-list">
+        {% for p in products %}
+          <label>
+            <input type="checkbox" name="product_ids" value="{{ p.id }}"
+              {% if session.product_id and p.id == session.product_id %}checked{% endif %} />
+            {{ p.category_name }} — {{ p.name }}
+          </label>
+        {% else %}
+          <p class="muted">В каталоге пока нет товаров — сначала добавьте их в каталоге.</p>
+        {% endfor %}
+      </div>
+    </div>
+    {% if f.already_in_db or f.added_supplier_id %}
+      <button class="btn secondary" type="submit">Обновить привязку к товарам</button>
+    {% else %}
+      <button class="btn" type="submit">Добавить в базу поставщиков</button>
+    {% endif %}
+  </form>
+</div>
+{% else %}
+<div class="panel"><p class="muted">Карточек нет — уточните запрос или проверьте AI-ключ / доступ в интернет.</p></div>
+{% endfor %}
+{% endblock %}

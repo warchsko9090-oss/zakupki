@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}{{ chat.title }} — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="topbar" style="margin-bottom:0.5rem">
+  <div>
+    <h1 style="margin:0">{{ chat.title }}</h1>
+    <p class="muted" style="margin:0.3rem 0 0">
+      {{ chat.supplier_name }} · {{ chat.active_email }}
+      · <span class="badge {{ chat.status }}">{{ chat.status }}</span>
+      · [CHAT-{{ chat.token }}]
+    </p>
+  </div>
+  <div class="actions" style="margin:0">
+    <form method="post" action="/chats/{{ chat.id }}/poll">
+      <button class="btn secondary" type="submit">Проверить почту</button>
+    </form>
+    <form method="post" action="/chats/{{ chat.id }}/delete" onsubmit="return confirm('Удалить чат и переписку?');">
+      <button class="btn danger" type="submit">Удалить</button>
+    </form>
+    <a class="btn secondary" href="/chats">К списку</a>
+  </div>
+</div>
+
+{% if chat.notes %}<p class="lead">Заметка: {{ chat.notes }}</p>{% endif %}
+
+{% if chat.line_items %}
+<div class="panel">
+  <h2>Позиции заказа</h2>
+  <table>
+    <thead><tr><th>Что</th><th>Кол-во</th><th>Комментарий</th></tr></thead>
+    <tbody>
+    {% for it in chat.line_items %}
+      <tr>
+        <td>
+          {% if it.category_name %}<span class="muted">{{ it.category_name }} — </span>{% endif %}
+          {{ it.product_name }}
+        </td>
+        <td>{{ it.quantity }} {{ it.unit }}</td>
+        <td class="muted">{{ it.note }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if chat.letter_conditions %}
+<details class="acc">
+  <summary><span>Условия заказа</span><span class="pill-muted">нажмите</span></summary>
+  <div class="acc-body"><div class="pre soft">{{ chat.letter_conditions }}</div></div>
+</details>
+{% endif %}
+
+{% set an = chat.analytics %}
+{% if an and (an.has_comparison or an.latest) %}
+<div class="panel">
+  <h2>Аналитика по ответу</h2>
+  {% if an.latest %}
+    {% if an.latest.summary %}<p>{{ an.latest.summary }}</p>{% endif %}
+    {% if an.latest.comparison %}
+      {% if an.latest.comparison.verdict %}
+        <p><span class="badge {% if an.latest.comparison.quantity_ok %}replied{% else %}pending{% endif %}">{{ an.latest.comparison.verdict }}</span></p>
+      {% endif %}
+      {% if an.latest.comparison.highlights %}
+      <ul class="cmp-list">
+        {% for h in an.latest.comparison.highlights %}<li>{{ h }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if an.latest.comparison.mismatches %}
+      <table class="cmp-table">
+        <thead><tr><th>Условие</th><th>Запрос</th><th>Ответ</th><th></th></tr></thead>
+        <tbody>
+        {% for m in an.latest.comparison.mismatches %}
+          <tr>
+            <td>{{ m.aspect }}</td><td>{{ m.requested }}</td><td>{{ m.offered }}</td>
+            <td><span class="badge {% if m.status == 'match' %}replied{% elif m.status == 'partial' %}pending{% else %}error{% endif %}">{{ m.status }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      {% if an.latest.comparison.delivery %}<p class="pill-muted">Доставка: {{ an.latest.comparison.delivery }}</p>{% endif %}
+      {% if an.latest.comparison.payment %}<p class="pill-muted">Оплата: {{ an.latest.comparison.payment }}</p>{% endif %}
+    {% endif %}
+    {% if an.line_items %}
+    <table style="margin-top:0.75rem">
+      <thead><tr><th>Позиция</th><th>Запрошено</th><th>Цена</th><th>Предложено</th><th>Срок</th></tr></thead>
+      <tbody>
+      {% for q in an.latest.quotes %}
+        <tr>
+          <td>{{ q.item.product_name }}</td>
+          <td>{{ q.item.quantity }} {{ q.item.unit }}</td>
+          <td>{% if q.quote and q.quote.unit_price is not none %}{{ q.quote.unit_price | money }} {{ q.quote.currency or 'RUB' }}{% else %}—{% endif %}</td>
+          <td>{% if q.quote and q.quote.offered_qty is not none %}{{ q.quote.offered_qty }} <span class="badge {{ q.quote.qty_fit or 'unknown' }}">{{ q.quote.qty_fit or '' }}</span>{% else %}—{% endif %}</td>
+          <td>{% if q.quote and q.quote.lead_time_days is not none %}{{ q.quote.lead_time_days }} дн.{% else %}—{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if an.latest.message %}
+    <form method="post" action="/chats/{{ chat.id }}/reparse/{{ an.latest.message.id }}" style="margin-top:0.5rem">
+      <button class="btn secondary small" type="submit">Переразобрать последний ответ</button>
+    </form>
+    {% endif %}
+  {% else %}
+    <p class="muted">Пока нет оцифрованных ответов. После письма поставщика нажмите «Проверить почту» или вставьте ответ вручную.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if chat.all_files %}
+<div class="panel">
+  <h2>Файлы в чате</h2>
+  <p class="muted">КП и счета учитываются в переписке; пометьте тип для удобства.</p>
+  <table>
+    <thead><tr><th>Файл</th><th>Тип</th><th>Направление</th><th></th></tr></thead>
+    <tbody>
+    {% for f in chat.all_files %}
+      <tr>
+        <td><a href="/files/{{ f.id }}" target="_blank" rel="noopener">{{ f.filename }}</a>
+          <span class="pill-muted">({{ (f.size_bytes / 1024)|round(1) }} КБ)</span></td>
+        <td>
+          <form method="post" action="/files/{{ f.id }}/kind" class="row" style="gap:0.35rem;align-items:center;margin:0">
+            <select name="kind">
+              <option value="kp" {% if f.kind=='kp' %}selected{% endif %}>КП</option>
+              <option value="invoice" {% if f.kind=='invoice' %}selected{% endif %}>Счёт</option>
+              <option value="pdf" {% if f.kind=='pdf' %}selected{% endif %}>PDF</option>
+              <option value="image" {% if f.kind=='image' %}selected{% endif %}>Фото</option>
+              <option value="other" {% if f.kind=='other' %}selected{% endif %}>Другое</option>
+            </select>
+            <input type="hidden" name="next" value="/chats/{{ chat.id }}" />
+            <button class="btn secondary small" type="submit">OK</button>
+          </form>
+        </td>
+        <td>{% if f.direction=='out' %}исходящий{% else %}входящий{% endif %}</td>
+        <td><a class="btn secondary small" href="/files/{{ f.id }}" target="_blank">Открыть</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>Переписка</h2>
+  <div class="chat">
+    {% for m in chat.messages %}
+        <div class="bubble {{ m.direction }}{% if m.is_new %} new-msg{% endif %}">
+          <div class="bubble-meta">
+            {% if m.direction == 'out' %}Вы{% else %}{{ chat.supplier_name }}{% endif %}
+            · {{ m.created_at[:16].replace('T',' ') if m.created_at else '' }}
+            {% if m.is_new %}<span class="new-tag">новое</span>{% endif %}
+            {% if m.status %}<span class="badge {{ m.status }}">{{ m.status }}</span>{% endif %}
+            {% if m.to_addr %}<span class="pill-muted">→ {{ m.to_addr }}</span>{% endif %}
+            {% if m.from_addr %}<span class="pill-muted">от {{ m.from_addr }}</span>{% endif %}
+            {% if m.source_channel and m.source_channel != 'email' %}
+              <span class="badge replied">{{ m.source_channel }}</span>
+            {% endif %}
+          </div>
+          {% if m.subject %}<div class="bubble-subj">{{ m.subject }}</div>{% endif %}
+          <div class="bubble-text">{{ m.display_body if m.display_body is defined else m.body }}</div>
+        {% if m.files %}
+        <div class="bubble-note">
+          {% for f in m.files %}
+            <a href="/files/{{ f.id }}" target="_blank" rel="noopener">📎 {{ f.kind_label }}: {{ f.filename }}</a>{% if not loop.last %} · {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if m.error %}<p class="flash err" style="margin-top:0.4rem">{{ m.error }}</p>{% endif %}
+        {% if m.direction == 'out' and m.status in ('pending', 'error') %}
+        <form method="post" action="/chats/{{ chat.id }}/send-draft/{{ m.id }}" style="margin-top:0.4rem">
+          <button class="btn small" type="submit">Отправить этот черновик</button>
+        </form>
+        {% endif %}
+        {% if m.direction == 'in' %}
+        <form method="post" action="/chats/{{ chat.id }}/reparse/{{ m.id }}" style="margin-top:0.4rem">
+          <button class="btn secondary small" type="submit">Переразобрать для аналитики</button>
+        </form>
+        {% endif %}
+      </div>
+    {% else %}
+      <p class="muted">Пока пусто — напишите первое сообщение ниже.</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="panel followup">
+  <h3 style="margin:0 0 0.4rem;font-size:1rem">Написать поставщику</h3>
+  <form method="post" action="/chats/{{ chat.id }}/send" enctype="multipart/form-data" class="stack">
+    <div class="field">
+      <label>Кому</label>
+      <input type="email" name="to_email" value="{{ chat.active_email }}" required />
+    </div>
+    <div class="field">
+      <label>Тема (код [CHAT-…] добавится сам)</label>
+      <input type="text" name="subject" placeholder="Уточнение / запрос КП" />
+    </div>
+    <div class="field">
+      <label>Текст</label>
+      <textarea name="body" id="chat-body" rows="8" placeholder="Текст письма…">{% if draft_body %}{{ draft_body }}{% endif %}</textarea>
+    </div>
+    {% if company_accounts %}
+    <div class="field">
+      <label>Вставить реквизиты компании</label>
+      <select name="company_account_id" id="company-acc">
+        <option value="">— не вставлять —</option>
+        {% for a in company_accounts %}
+          <option value="{{ a.id }}">{{ a.label }}{% if a.is_default %} (по умолчанию){% endif %}</option>
+        {% endfor %}
+      </select>
+      <p class="pill-muted">Или кнопкой ниже в текстовое поле. Редактировать — в <a href="/settings#companies">Настройках</a>.</p>
+      <button class="btn secondary small" type="button" id="insert-req">Вставить выбранные реквизиты в текст</button>
+    </div>
+    {% else %}
+    <p class="muted">Реквизиты компаний можно добавить в <a href="/settings#companies">Настройках</a> (до 5 шт).</p>
+    {% endif %}
+    <div class="field">
+      <label>Вложения (КП, счета, ваши файлы — до 5, по 15 МБ)</label>
+      <input type="file" name="files" multiple />
+    </div>
+    <label class="field" style="display:flex;gap:0.5rem;align-items:center;color:inherit">
+      <input type="checkbox" name="remember_email" value="1" checked />
+      Запомнить адрес для этого чата
+    </label>
+    <div class="actions">
+      <button class="btn" type="submit">Отправить</button>
+      {% if not chat.messages %}
+      <a class="btn secondary" href="/chats/{{ chat.id }}?draft=1">Подставить черновик первого письма</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="panel followup">
+  <h3 style="margin:0 0 0.4rem;font-size:1rem">Входящее вручную + файлы</h3>
+  <p class="pill-muted">Если КП/счёт пришли в мессенджере или без кода в теме — вставьте текст и приложите файлы.</p>
+  <form method="post" action="/chats/{{ chat.id }}/import" enctype="multipart/form-data" class="stack">
+    <div class="field">
+      <label>Канал</label>
+      <select name="channel">
+        <option value="email">Email (без автоподхвата)</option>
+        <option value="telegram">Telegram</option>
+        <option value="max">Макс</option>
+        <option value="manual">Другое</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Текст</label>
+      <textarea name="body" rows="5" placeholder="Текст ответа или комментарий к файлам…"></textarea>
+    </div>
+    <div class="field">
+      <label>Файлы (КП / счёт)</label>
+      <input type="file" name="files" multiple />
+    </div>
+    <button class="btn" type="submit">Добавить во входящие</button>
+  </form>
+</div>
+
+<script>
+(function () {
+  var btn = document.getElementById('insert-req');
+  var sel = document.getElementById('company-acc');
+  var ta = document.getElementById('chat-body');
+  if (!btn || !sel || !ta) return;
+  var blocks = {{ requisite_blocks_json | safe }};
+  btn.addEventListener('click', function () {
+    var id = sel.value;
+    if (!id || !blocks[id]) return;
+    var block = blocks[id];
+    if (ta.value && !ta.value.endsWith('\n')) ta.value += '\n\n';
+    ta.value += block;
+  });
+})();
+</script>
+{% endblock %}

@@ -13,6 +13,7 @@
 
 <div class="actions">
   <a class="btn" href="/rfq/new">Новый запрос КП</a>
+  <a class="btn secondary" href="/search">Поиск поставщиков AI</a>
   <a class="btn secondary" href="/catalog">Каталог</a>
   <a class="btn secondary" href="/suppliers">Поставщики</a>
 </div>
@@ -27,7 +28,10 @@
     <tbody>
     {% for r in recent %}
       <tr>
-        <td>{{ r.title }}</td>
+        <td>
+          {{ r.title }}
+          {% if r.unread_count %}<span class="new-tag">+{{ r.unread_count }} новое</span>{% endif %}
+        </td>
         <td><span class="badge {{ r.status }}">{{ r.status }}</span></td>
         <td class="pill-muted">{{ r.created_at[:16].replace('T',' ') }}</td>
         <td><a href="/rfq/{{ r.id }}">Открыть</a></td>

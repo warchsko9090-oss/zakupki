@@ -15,8 +15,14 @@
       <nav class="nav">
         <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Обзор</a>
         <a href="/catalog" class="{% if request.url.path.startswith('/catalog') %}active{% endif %}">Каталог</a>
+        <a href="/search" class="{% if request.url.path.startswith('/search') %}active{% endif %}">Поиск AI</a>
         <a href="/suppliers" class="{% if request.url.path.startswith('/suppliers') %}active{% endif %}">Поставщики</a>
-        <a href="/rfq" class="{% if request.url.path.startswith('/rfq') %}active{% endif %}">Запросы</a>
+        <a href="/rfq" class="{% if request.url.path.startswith('/rfq') %}active{% endif %}">
+          Запросы{% if nav_unread_rfq %} <span class="nav-dot" title="Новые ответы">{{ nav_unread_rfq }}</span>{% endif %}
+        </a>
+        <a href="/chats" class="{% if request.url.path.startswith('/chats') %}active{% endif %}">
+          Чаты{% if nav_unread_chats %} <span class="nav-dot" title="Новые сообщения">{{ nav_unread_chats }}</span>{% endif %}
+        </a>
         <a href="/settings" class="{% if request.url.path.startswith('/settings') %}active{% endif %}">Настройки</a>
         <form method="post" action="/logout" style="display:inline">
           <button class="btn secondary small" type="submit">Выйти</button>

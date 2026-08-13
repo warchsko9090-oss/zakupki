@@ -2,41 +2,193 @@
 {% block title %}Настройки — {{ app_name }}{% endblock %}
 {% block content %}
 <h1>Настройки</h1>
-<p class="lead">Почта и шаблон писем. Учётные данные задаются в переменных окружения / .env.</p>
+<p class="lead">Подпись менеджера, шаблон запроса КП, реквизиты компаний и почта.</p>
 
-<div class="grid grid-2">
-  <div class="panel">
-    <h2>Почта Яндекс</h2>
-    <p>Отправитель: <strong>{{ sender_name }}</strong>{% if sender_company %} · {{ sender_company }}{% endif %}</p>
-    <p class="muted">Логин: {{ mail_user }}<br />From: {{ mail_from }}</p>
-    <p class="muted">
-      Статус: {% if mail_ready %}<span class="badge replied">готово</span>{% else %}<span class="badge error">не настроено</span>{% endif %}
-      · AI: {% if ai_ready %}вкл.{% else %}выкл. (эвристики){% endif %}
-    </p>
-    <form method="post" action="/settings/poll">
-      <button class="btn secondary" type="submit">Проверить входящие сейчас</button>
-    </form>
-    <p class="pill-muted" style="margin-top:0.75rem">
-      Нужен <strong>пароль приложения</strong> Яндекса (не обычный пароль от почты):
-      id.yandex.ru → Безопасность → Пароли приложений.
-      SMTP/IMAP: smtp.yandex.ru:465 / imap.yandex.ru:993.
-    </p>
-  </div>
+<div class="nav" style="margin-bottom:1rem">
+  <a href="/settings#signature" class="active">Подпись</a>
+  <a href="/settings#template">Шаблон письма</a>
+  <a href="/settings#companies">Реквизиты</a>
+  <a href="/settings#mail">Почта</a>
+</div>
 
-  <div class="panel">
-    <h2>Шаблон письма</h2>
-    <p class="muted">Переменные Jinja2: <code>token</code>, <code>contact</code>, <code>sender_name</code>, <code>company</code>, <code>items</code> (name, quantity, unit, note), <code>reply_hint</code>.</p>
-    <form method="post" action="/settings/template" class="stack">
+<div class="panel" id="signature">
+  <h2>Подпись менеджера</h2>
+  <p class="muted">Подставляется в шаблон писем и в поле From. Хранится в базе (не только в .env).</p>
+  <form method="post" action="/settings/signature" class="stack">
+    <div class="row">
       <div class="field">
-        <label>Тема</label>
-        <input type="text" name="subject_tpl" value="{{ tpl.subject_tpl }}" required />
+        <label>Имя / как представляетесь</label>
+        <input type="text" name="sender_name" value="{{ profile.sender_name }}" required />
       </div>
       <div class="field">
-        <label>Текст</label>
-        <textarea name="body_tpl" rows="16" required>{{ tpl.body_tpl }}</textarea>
+        <label>Должность</label>
+        <input type="text" name="sender_position" value="{{ profile.sender_position }}" placeholder="Менеджер по закупкам" />
       </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Компания / ИП</label>
+        <input type="text" name="sender_company" value="{{ profile.sender_company }}" />
+      </div>
+      <div class="field">
+        <label>Телефон в подписи</label>
+        <input type="text" name="sender_phone" value="{{ profile.sender_phone }}" />
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Сайт компании</label>
+        <input type="text" name="sender_website" value="{{ profile.sender_website }}" placeholder="https://example.ru" />
+      </div>
+      <div class="field">
+        <label>Строка-комментарий в подписи</label>
+        <input type="text" name="signature_note" value="{{ profile.signature_note }}"
+          placeholder="Каталог и условия: https://example.ru/buyers" />
+      </div>
+    </div>
+    <p class="muted">Сайт и комментарий попадут в подпись писем (запросы КП, чаты, уточнения).</p>
+    <button class="btn" type="submit">Сохранить подпись</button>
+  </form>
+</div>
+
+<div class="panel" id="template">
+  <h2>Шаблон письма запроса КП</h2>
+  <p class="muted">
+    Это основа письма при создании запроса. AI (если включён) только слегка правит текст шаблона,
+    не пишет письмо с нуля.     Переменные:
+    <code>token</code>, <code>contact</code>, <code>sender_name</code>, <code>company</code>,
+    <code>position</code>, <code>phone</code>, <code>website</code>, <code>signature_note</code>,
+    <code>items</code>, <code>conditions</code>, <code>reply_hint</code>.
+    Блок <code>{% raw %}{% if conditions %}…{% endif %}{% endraw %}</code> подставляет условия из формы нового запроса.
+  </p>
+  <form method="post" action="/settings/template" class="stack">
+    <div class="field">
+      <label>Тема</label>
+      <input type="text" name="subject_tpl" value="{{ tpl.subject_tpl }}" required />
+    </div>
+    <div class="field">
+      <label>Текст</label>
+      <textarea name="body_tpl" rows="18" required>{{ tpl.body_tpl }}</textarea>
+    </div>
+    <div class="actions">
       <button class="btn" type="submit">Сохранить шаблон</button>
+    </div>
+  </form>
+  <form method="post" action="/settings/template/reset" style="margin-top:0.5rem" onsubmit="return confirm('Вернуть стандартный шаблон закупщика?')">
+    <button class="btn secondary small" type="submit">Сбросить к стандартному</button>
+  </form>
+</div>
+
+<div class="panel" id="companies">
+  <h2>Реквизиты компаний</h2>
+  <p class="muted">До 5 юрлиц / ИП. В чате и уточнении по запросу можно быстро вставить блок реквизитов в письмо.</p>
+
+  {% for a in company_accounts %}
+  <form method="post" action="/settings/companies/{{ a.id }}" class="stack" style="margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid #ddd">
+    <div class="row">
+      <div class="field"><label>Краткое имя</label><input type="text" name="label" value="{{ a.label }}" required /></div>
+      <div class="field"><label>Получатель (юр. название)</label><input type="text" name="legal_name" value="{{ a.legal_name }}" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>ИНН</label><input type="text" name="inn" value="{{ a.inn }}" /></div>
+      <div class="field"><label>КПП</label><input type="text" name="kpp" value="{{ a.kpp }}" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Банк</label><input type="text" name="bank_name" value="{{ a.bank_name }}" /></div>
+      <div class="field"><label>БИК</label><input type="text" name="bik" value="{{ a.bik }}" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>р/с</label><input type="text" name="checking_account" value="{{ a.checking_account }}" /></div>
+      <div class="field"><label>к/с</label><input type="text" name="corr_account" value="{{ a.corr_account }}" /></div>
+    </div>
+    <div class="field"><label>Адрес</label><input type="text" name="address" value="{{ a.address }}" /></div>
+    <label class="field" style="display:flex;gap:0.5rem;align-items:center;color:inherit">
+      <input type="checkbox" name="is_default" value="1" {% if a.is_default %}checked{% endif %} />
+      По умолчанию
+    </label>
+    <div class="actions">
+      <button class="btn" type="submit">Сохранить</button>
+    </div>
+  </form>
+  <form method="post" action="/settings/companies/{{ a.id }}/delete" onsubmit="return confirm('Удалить эти реквизиты?')" style="margin-bottom:1.5rem">
+    <button class="btn danger small" type="submit">Удалить</button>
+  </form>
+  {% endfor %}
+
+  {% if company_accounts|length < 5 %}
+  <h3>Добавить компанию</h3>
+  <form method="post" action="/settings/companies" class="stack">
+    <div class="row">
+      <div class="field"><label>Краткое имя</label><input type="text" name="label" required placeholder="ИП Терехова" /></div>
+      <div class="field"><label>Получатель</label><input type="text" name="legal_name" placeholder="ИП Терехова А. А." /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>ИНН</label><input type="text" name="inn" /></div>
+      <div class="field"><label>КПП</label><input type="text" name="kpp" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Банк</label><input type="text" name="bank_name" /></div>
+      <div class="field"><label>БИК</label><input type="text" name="bik" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>р/с</label><input type="text" name="checking_account" /></div>
+      <div class="field"><label>к/с</label><input type="text" name="corr_account" /></div>
+    </div>
+    <div class="field"><label>Адрес</label><input type="text" name="address" /></div>
+    <label class="field" style="display:flex;gap:0.5rem;align-items:center;color:inherit">
+      <input type="checkbox" name="is_default" value="1" {% if not company_accounts %}checked{% endif %} />
+      По умолчанию
+    </label>
+    <button class="btn" type="submit">Добавить</button>
+  </form>
+  {% else %}
+  <p class="muted">Лимит 5 компаний. Удалите одну, чтобы добавить новую.</p>
+  {% endif %}
+</div>
+
+<div class="panel" id="mail">
+  <h2>Почта Яндекс</h2>
+  <p class="muted">Логин: {{ mail_user }}<br />From: {{ mail_from }}<br />Длина MAIL_PASSWORD: {{ mail_pw_len }} (нужно 16)</p>
+  <p class="muted">
+    .env: {% if mail_ready %}<span class="badge replied">поля заполнены</span>{% else %}<span class="badge error">не заполнено</span>{% endif %}
+    · AI: {% if ai_ready %}вкл.{% else %}выкл.{% endif %}
+  </p>
+  <p class="muted">
+    Автопроверка почты:
+    {% if mail_poll_enabled and mail_ready %}
+      <span class="badge replied">вкл. каждые {{ mail_poll_minutes }} мин</span>
+    {% elif mail_poll_enabled %}
+      <span class="badge pending">вкл. в .env, но почта не готова</span>
+    {% else %}
+      <span class="badge error">выкл. (MAIL_POLL_ENABLED=false)</span>
+    {% endif %}
+    {% if last_poll and last_poll.at %}
+      <br />Последний автоопрос:
+      {{ last_poll.at[:16].replace('T',' ') }} UTC —
+      {% if last_poll.ok %}ok, просмотрено {{ last_poll.checked }}, новых {{ last_poll.saved }}
+      {% else %}<span class="badge error">{{ last_poll.error or 'ошибка' }}</span>{% endif %}
+    {% endif %}
+  </p>
+
+  {% if mail_test %}
+    {% if mail_test.ok %}
+      <div class="flash ok">{{ mail_test.detail }}</div>
+    {% else %}
+      <div class="flash err">{{ mail_test.error }}</div>
+    {% endif %}
+  {% endif %}
+
+  <div class="actions">
+    <form method="post" action="/settings/test-mail">
+      <button class="btn" type="submit">Проверить вход IMAP/SMTP</button>
+    </form>
+    <form method="post" action="/settings/poll">
+      <button class="btn secondary" type="submit">Проверить входящие (только свежие)</button>
     </form>
   </div>
+  <p class="pill-muted">
+    Автоподгрузка: <code>MAIL_POLL_ENABLED=true</code>, интервал <code>MAIL_POLL_MINUTES</code> в <code>.env</code> (нужен перезапуск приложения).
+    Кнопка ниже — ручная проверка; автоопрос смотрит только непрочитанные.
+  </p>
 </div>
 {% endblock %}

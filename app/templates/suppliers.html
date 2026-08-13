@@ -2,7 +2,7 @@
 {% block title %}Поставщики — {{ app_name }}{% endblock %}
 {% block content %}
 <h1>Поставщики</h1>
-<p class="lead">Контакты и ассортимент: какие товары может поставить каждый контрагент.</p>
+<p class="lead">Контакты и ассортимент: какие товары может поставить каждый контрагент. Или найдите новых через <a href="/search">Поиск AI</a>.</p>
 
 <div class="panel">
   <h2>Добавить поставщика</h2>
@@ -15,6 +15,7 @@
       <div class="field"><label>Контактное лицо</label><input type="text" name="contact_person" /></div>
       <div class="field"><label>Телефон</label><input type="text" name="phone" /></div>
     </div>
+    <div class="field"><label>Сайт</label><input type="text" name="website" placeholder="https://" /></div>
     <div class="field"><label>Заметки</label><input type="text" name="notes" /></div>
     <div class="field">
       <label>Ассортимент (товары)</label>
@@ -33,7 +34,7 @@
 {% for s in suppliers %}
 <div class="panel">
   <h2>{{ s.name }}</h2>
-  <p class="muted">{{ s.email }}{% if s.contact_person %} · {{ s.contact_person }}{% endif %}{% if s.phone %} · {{ s.phone }}{% endif %}</p>
+  <p class="muted">{{ s.email }}{% if s.website %} · <a href="{{ s.website }}" target="_blank" rel="noopener">{{ s.website }}</a>{% endif %}{% if s.contact_person %} · {{ s.contact_person }}{% endif %}{% if s.phone %} · {{ s.phone }}{% endif %}</p>
   <form method="post" action="/suppliers/{{ s.id }}" class="stack">
     <div class="row">
       <div class="field"><label>Название</label><input type="text" name="name" value="{{ s.name }}" required /></div>
@@ -43,6 +44,7 @@
       <div class="field"><label>Контактное лицо</label><input type="text" name="contact_person" value="{{ s.contact_person }}" /></div>
       <div class="field"><label>Телефон</label><input type="text" name="phone" value="{{ s.phone }}" /></div>
     </div>
+    <div class="field"><label>Сайт</label><input type="text" name="website" value="{{ s.website or '' }}" /></div>
     <div class="field"><label>Заметки</label><input type="text" name="notes" value="{{ s.notes }}" /></div>
     <div class="field">
       <label>Ассортимент</label>

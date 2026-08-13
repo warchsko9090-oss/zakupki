@@ -13,17 +13,33 @@
   {% else %}
   <table>
     <thead>
-      <tr><th>Название</th><th>Статус</th><th>Письма</th><th>Ответы</th><th>Дата</th><th></th></tr>
+      <tr><th>Название</th><th>Статус</th><th>Письма</th><th>Ответы</th><th>Период</th><th></th></tr>
     </thead>
     <tbody>
     {% for r in rfqs %}
       <tr>
-        <td>{{ r.title }}</td>
+        <td>
+          <form method="post" action="/rfq/{{ r.id }}/rename" class="row" style="align-items:end;gap:0.4rem;margin:0">
+            <input type="hidden" name="next" value="/rfq" />
+            <div class="field" style="flex:2;margin:0;min-width:160px">
+              <input type="text" name="title" value="{{ r.title }}" required />
+            </div>
+            <button class="btn secondary small" type="submit">Сохранить</button>
+          </form>
+          {% if r.unread_count %}<span class="new-tag">+{{ r.unread_count }} новое</span>{% endif %}
+        </td>
         <td><span class="badge {{ r.status }}">{{ r.status }}</span></td>
         <td>{{ r.msg_count }}</td>
-        <td>{{ r.reply_count }}</td>
-        <td class="pill-muted">{{ r.created_at[:16].replace('T',' ') }}</td>
-        <td><a href="/rfq/{{ r.id }}">Открыть</a></td>
+        <td>{{ r.reply_count }}{% if r.unread_count %} <span class="new-tag">{{ r.unread_count }}</span>{% endif %}</td>
+        <td class="pill-muted">{{ r.created_month_year }}</td>
+        <td>
+          <div class="actions" style="margin:0">
+            <a class="btn secondary small" href="/rfq/{{ r.id }}">Открыть</a>
+            <form method="post" action="/rfq/{{ r.id }}/delete" onsubmit="return confirm('Удалить запрос «{{ r.title }}» вместе с письмами и ответами?');" style="margin:0">
+              <button class="btn danger small" type="submit">Удалить</button>
+            </form>
+          </div>
+        </td>
       </tr>
     {% endfor %}
     </tbody>
