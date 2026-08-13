@@ -40,6 +40,48 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _use_starttls(port: int) -> bool:
+    """465 = implicit SSL; 587/25/2525 = plain then STARTTLS."""
+    return int(port) in (25, 587, 2525)
+
+
+def _smtp_send(msg: EmailMessage, *, settings) -> None:
+    """Connect via SMTP_SSL (465) or SMTP+STARTTLS (587) and send."""
+    host = (settings.mail_smtp_host or "").strip() or "smtp.yandex.ru"
+    port = int(settings.mail_smtp_port or 465)
+    user = settings.mail_user.strip()
+    password = settings.mail_password
+    context = ssl.create_default_context()
+    if _use_starttls(port):
+        with smtplib.SMTP(host, port, timeout=IMAP_TIMEOUT_SEC) as smtp:
+            smtp.ehlo()
+            smtp.starttls(context=context)
+            smtp.ehlo()
+            smtp.login(user, password)
+            smtp.send_message(msg)
+    else:
+        with smtplib.SMTP_SSL(host, port, context=context, timeout=IMAP_TIMEOUT_SEC) as smtp:
+            smtp.login(user, password)
+            smtp.send_message(msg)
+
+
+def _smtp_login_check(*, settings) -> None:
+    host = (settings.mail_smtp_host or "").strip() or "smtp.yandex.ru"
+    port = int(settings.mail_smtp_port or 465)
+    user = settings.mail_user.strip()
+    password = settings.mail_password
+    context = ssl.create_default_context()
+    if _use_starttls(port):
+        with smtplib.SMTP(host, port, timeout=IMAP_TIMEOUT_SEC) as smtp:
+            smtp.ehlo()
+            smtp.starttls(context=context)
+            smtp.ehlo()
+            smtp.login(user, password)
+    else:
+        with smtplib.SMTP_SSL(host, port, context=context, timeout=IMAP_TIMEOUT_SEC) as smtp:
+            smtp.login(user, password)
+
+
 def send_email(
     *,
     to_addr: str,
@@ -76,15 +118,7 @@ def send_email(
             filename=filename,
         )
 
-    context = ssl.create_default_context()
-    with smtplib.SMTP_SSL(
-        settings.mail_smtp_host,
-        settings.mail_smtp_port,
-        context=context,
-        timeout=IMAP_TIMEOUT_SEC,
-    ) as smtp:
-        smtp.login(settings.mail_user.strip(), settings.mail_password)
-        smtp.send_message(msg)
+    _smtp_send(msg, settings=settings)
     return message_id
 
 
@@ -188,17 +222,23 @@ def test_mail_login() -> dict[str, Any]:
     except Exception as exc:
         return {"ok": False, "error": _yandex_auth_hint(str(exc))}
     try:
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(
-            settings.mail_smtp_host,
-            settings.mail_smtp_port,
-            context=context,
-            timeout=IMAP_TIMEOUT_SEC,
-        ) as smtp:
-            smtp.login(settings.mail_user.strip(), settings.mail_password)
+        _smtp_login_check(settings=settings)
     except Exception as exc:
-        return {"ok": False, "error": f"SMTP: {_yandex_auth_hint(str(exc))}"}
-    return {"ok": True, "detail": "IMAP и SMTP вход успешны"}
+        return {
+            "ok": False,
+            "error": (
+                f"SMTP ({settings.mail_smtp_host}:{settings.mail_smtp_port}): "
+                f"{_yandex_auth_hint(str(exc))}"
+            ),
+        }
+    mode = "STARTTLS" if _use_starttls(int(settings.mail_smtp_port or 465)) else "SSL"
+    return {
+        "ok": True,
+        "detail": (
+            f"IMAP и SMTP вход успешны "
+            f"({settings.mail_smtp_host}:{settings.mail_smtp_port}, {mode})"
+        ),
+    }
 
 
 def poll_replies(
