@@ -326,7 +326,7 @@
           {% if ev.files %}
           <div class="bubble-note">
             {% for f in ev.files %}
-              <a href="/files/{{ f.id }}" target="_blank" rel="noopener">📎 {{ f.kind_label }}: {{ f.filename }}</a>{% if not loop.last %} · {% endif %}
+            <a href="/files/{{ f.id }}" target="_blank" rel="noopener">📎 {{ f.kind_label }}: {{ f.filename }}</a>{% if f.on_disk is defined and not f.on_disk %} <span class="badge error">нет на диске</span>{% endif %}{% if not loop.last %} · {% endif %}
             {% endfor %}
           </div>
           {% endif %}

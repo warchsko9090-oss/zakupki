@@ -191,4 +191,22 @@
     Кнопка ниже — ручная проверка; автоопрос смотрит только непрочитанные.
   </p>
 </div>
+
+<div class="panel" id="storage">
+  <h2>Хранилище данных</h2>
+  <p class="muted">База и вложения должны быть на постоянном томе. На Amvera — только <code>/data</code>.</p>
+  <p>
+    Каталог: <code>{{ storage.data_dir }}</code><br />
+    База: <code>{{ storage.db_path }}</code>
+    {% if storage.db_exists %}<span class="badge replied">есть</span>{% else %}<span class="badge error">нет файла</span>{% endif %}<br />
+    Вложения: <code>{{ storage.attachments_dir }}</code>
+    — файлов на диске: {{ storage.attachments_count }},
+    записей в БД: {{ storage.db_file_rows }}
+  </p>
+  <p class="muted">
+    Чтобы перенести старые данные на Amvera: в <strong>Репозиторий → Data</strong> загрузите
+    <code>zakupki.db</code> и папку <code>attachments/</code> (если она есть локально в <code>data/attachments</code>).
+    Одного файла БД недостаточно — сами КП/счета лежат отдельно на диске.
+  </p>
+</div>
 {% endblock %}

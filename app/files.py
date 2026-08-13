@@ -32,9 +32,7 @@ ALLOWED_EXT = {
 
 
 def attachments_root() -> Path:
-    root = get_settings().db_path.parent / "attachments"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+    return get_settings().attachments_dir
 
 
 def _safe_filename(name: str) -> str:
@@ -110,7 +108,7 @@ def save_upload(
 
 
 def list_files(conn, owner_type: str, owner_id: int) -> list[dict]:
-    return rows_to_dicts(
+    rows = rows_to_dicts(
         conn.execute(
             """
             SELECT * FROM message_files
@@ -120,6 +118,10 @@ def list_files(conn, owner_type: str, owner_id: int) -> list[dict]:
             (owner_type, owner_id),
         ).fetchall()
     )
+    for r in rows:
+        r["on_disk"] = resolve_path(r.get("stored_name") or "").is_file()
+        r["kind_label"] = kind_label(r.get("kind") or "")
+    return rows
 
 
 def list_files_for_owners(conn, owner_type: str, owner_ids: list[int]) -> dict[int, list[dict]]:
@@ -138,6 +140,8 @@ def list_files_for_owners(conn, owner_type: str, owner_ids: list[int]) -> dict[i
     )
     out: dict[int, list[dict]] = {int(i): [] for i in owner_ids}
     for r in rows:
+        r["on_disk"] = resolve_path(r.get("stored_name") or "").is_file()
+        r["kind_label"] = kind_label(r.get("kind") or "")
         out.setdefault(int(r["owner_id"]), []).append(r)
     return out
 

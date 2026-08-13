@@ -119,6 +119,7 @@
     {% for f in chat.all_files %}
       <tr>
         <td><a href="/files/{{ f.id }}" target="_blank" rel="noopener">{{ f.filename }}</a>
+          {% if f.on_disk is defined and not f.on_disk %}<span class="badge error">нет на диске</span>{% endif %}
           <span class="pill-muted">({{ (f.size_bytes / 1024)|round(1) }} КБ)</span></td>
         <td>
           <form method="post" action="/files/{{ f.id }}/kind" class="row" style="gap:0.35rem;align-items:center;margin:0">
@@ -163,7 +164,7 @@
         {% if m.files %}
         <div class="bubble-note">
           {% for f in m.files %}
-            <a href="/files/{{ f.id }}" target="_blank" rel="noopener">📎 {{ f.kind_label }}: {{ f.filename }}</a>{% if not loop.last %} · {% endif %}
+            <a href="/files/{{ f.id }}" target="_blank" rel="noopener">📎 {{ f.kind_label }}: {{ f.filename }}</a>{% if f.on_disk is defined and not f.on_disk %} <span class="badge error">нет на диске</span>{% endif %}{% if not loop.last %} · {% endif %}
           {% endfor %}
         </div>
         {% endif %}

@@ -1438,6 +1438,16 @@ async def settings_page(request: Request):
         tpl = services.get_default_template(conn)
         profile = services.get_manager_profile(conn)
         company_accounts = chat_svc.list_company_accounts(conn)
+        att_dir = cfg.attachments_dir
+        db_file_rows = conn.execute("SELECT COUNT(*) AS c FROM message_files").fetchone()["c"]
+        storage = {
+            "data_dir": str(cfg.data_root),
+            "db_path": str(cfg.db_path),
+            "db_exists": cfg.db_path.is_file(),
+            "attachments_dir": str(att_dir),
+            "attachments_count": len([p for p in att_dir.iterdir() if p.is_file()]) if att_dir.is_dir() else 0,
+            "db_file_rows": int(db_file_rows or 0),
+        }
     finally:
         conn.close()
     from app.scheduler import get_last_poll
@@ -1449,6 +1459,7 @@ async def settings_page(request: Request):
             tpl=tpl,
             profile=profile,
             company_accounts=company_accounts,
+            storage=storage,
             mail_user=cfg.mail_user or "(не задан)",
             mail_from=cfg.mail_from_addr or "(не задан)",
             mail_pw_len=len(cfg.mail_password or ""),

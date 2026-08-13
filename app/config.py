@@ -1,8 +1,14 @@
+from __future__ import annotations
+
+import logging
+import os
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+log = logging.getLogger("config")
 
 
 def _strip_env(v: str) -> str:
@@ -93,22 +99,38 @@ class Settings(BaseSettings):
         return bool(self.ai_enabled and self.ai_api_key.strip())
 
     @property
-    def db_path(self) -> Path:
-        root = Path(self.data_dir)
-        if not root.exists():
-            try:
-                root.mkdir(parents=True, exist_ok=True)
-            except OSError:
-                root = Path(__file__).resolve().parent.parent / "data"
-                root.mkdir(parents=True, exist_ok=True)
+    def data_root(self) -> Path:
+        """Directory for SQLite + attachments. On Amvera must stay on the /data volume."""
+        root = Path(self.data_dir).expanduser()
+        # Never silently fall back when DATA_DIR is set or path is the Amvera volume —
+        # otherwise DB/files land in ephemeral /app/data and disappear after rebuild.
+        forced = bool(os.environ.get("DATA_DIR")) or root.as_posix() in ("/data", "/data/")
         try:
+            root.mkdir(parents=True, exist_ok=True)
             test = root / ".write_test"
             test.write_text("ok", encoding="utf-8")
             test.unlink(missing_ok=True)
-        except OSError:
-            root = Path(__file__).resolve().parent.parent / "data"
-            root.mkdir(parents=True, exist_ok=True)
-        return root / "zakupki.db"
+        except OSError as exc:
+            if forced:
+                raise RuntimeError(
+                    f"Каталог данных недоступен для записи: {root} ({exc}). "
+                    "На Amvera нужен persistenceMount=/data и переменная DATA_DIR=/data."
+                ) from exc
+            fallback = Path(__file__).resolve().parent.parent / "data"
+            fallback.mkdir(parents=True, exist_ok=True)
+            log.warning("DATA_DIR %s not writable (%s), using %s", root, exc, fallback)
+            root = fallback
+        return root
+
+    @property
+    def db_path(self) -> Path:
+        return self.data_root / "zakupki.db"
+
+    @property
+    def attachments_dir(self) -> Path:
+        path = self.data_root / "attachments"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
 
 @lru_cache
